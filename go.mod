@@ -46,7 +46,6 @@ replace (
 	k8s.io/apimachinery => k8s.io/apimachinery v0.16.5
 	k8s.io/client-go => k8s.io/client-go v0.16.5
 	k8s.io/metrics => k8s.io/metrics v0.0.0-20190819143841-305e1cef1ab1
-
 )
 
 go 1.13
