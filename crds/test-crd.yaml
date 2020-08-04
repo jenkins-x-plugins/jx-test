@@ -3,6 +3,27 @@ kind: CustomResourceDefinition
 metadata:
   name: testruns.jxtest.jenkins.io
 spec:
+  additionalPrinterColumns:
+  - JSONPath: .spec.testSource.url
+    description: The git repository for the test run instance data
+    name: TEST URL
+    type: string
+  - JSONPath: .spec.branch
+    description: The git branch on the source repository
+    name: BRANCH
+    type: string
+  - JSONPath: .spec.context
+    description: The pipeline context for the test case
+    name: CONTEXT
+    type: string
+  - JSONPath: .spec.buildNumber
+    description: The build number
+    name: BUILD NUMBER
+    type: integer
+  - JSONPath: .spec.triggerSource.url
+    description: The git repository which triggered the test case
+    name: TRIGGER URL
+    type: string
   group: jxtest.jenkins.io
   names:
     kind: TestRun
