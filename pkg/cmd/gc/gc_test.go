@@ -2,10 +2,12 @@ package gc_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/alecthomas/assert"
+	"github.com/jenkins-x/jx-helpers/pkg/cmdrunner/fakerunner"
 	"github.com/jenkins-x/jx-test/pkg/apis/jxtest/v1alpha1"
 	"github.com/jenkins-x/jx-test/pkg/client/clientset/versioned/fake"
 	"github.com/jenkins-x/jx-test/pkg/cmd/create"
@@ -19,53 +21,79 @@ const (
 	testNamespace = "jx"
 )
 
-func TestDeleteDueToNewerRun(t *testing.T) {
+func TestShouldDeleteMarkedTestRun(t *testing.T) {
 	t.Parallel()
-	o := CreateTestOptions()
-	cluster1 := getCluster(t, o, "168", "gke-terraform-vault", "159")
-	cluster2 := getCluster(t, o, "168", "gke-terraform-vault", "160")
-	clusters := make([]v1alpha1.TestRun, 0)
-	clusters = append(clusters, *cluster1, *cluster2)
-	assert.Equal(t, true, o.ShouldDeleteDueToNewerRun(cluster1, clusters))
-	cluster4 := getCluster(t, o, "168", "gke-terraform-vault", "161")
-	clusters = append(clusters, *cluster4)
-	assert.Equal(t, false, o.ShouldDeleteDueToNewerRun(cluster4, clusters))
+	o, runner := CreateTestOptions()
+	testRun := CreateTestRun(t, o, "168", "gke-terraform-vault", "1")
+	testRun2 := CreateTestRun(t, o, "170", "gke-terraform-vault", "2")
+	AssertDelete(t, o, testRun, false)
+	AssertDelete(t, o, testRun2, false)
+
+	testRun2.Spec.Delete = true
+	AssertUpdate(t, o, testRun2)
+	AssertDelete(t, o, testRun2, true)
+
+	cmds := runner.OrderedCommands
+	for _, c := range cmds {
+		t.Logf("invoked command %s\n", c.CLI())
+	}
+	require.Len(t, cmds, 2, "command results")
+
+	cloneCLI := cmds[0].CLI()
+	prefix := "git clone https://github.com/myorg/env-pr-170-2-bdd-gke-terraform-vault-dev.git"
+	assert.True(t, strings.HasPrefix(cloneCLI, prefix), "should have performed a git clone with command %s but was %s", prefix, cloneCLI)
+
+	assert.Equal(t, "bin/destroy.sh", cmds[1].CLI())
 }
 
-func TestShouldDeleteMarkedCluster(t *testing.T) {
+func TestShouldDeleteNewerRunUsingNumericBuildNuymber(t *testing.T) {
 	t.Parallel()
-	o := CreateTestOptions()
-	cluster := getCluster(t, o, "168", "gke-terraform-vault", "159")
-	cluster2 := getCluster(t, o, "170", "gke-terraform-vault", "159")
-	AssertDelete(t, o, cluster, false)
-	AssertDelete(t, o, cluster2, false)
-	//assert.Equal(t, false, o.ShouldDeleteMarkedCluster(cluster))
-	
-	cluster2.Spec.Delete = true
-	AssertUpdate(t, o, cluster2)
-	AssertDelete(t, o, cluster2, true)
-	//assert.Equal(t, true, o.ShouldDeleteMarkedCluster(cluster2))
+	o, _ := CreateTestOptions()
+
+	testRun1 := CreateTestRun(t, o, "168", "gke-terraform-vault", "2")
+	testRun2 := CreateTestRun(t, o, "55", "gke-terraform-vault", "2")
+	testRun3 := CreateTestRun(t, o, "168", "gke-terraform-vault", "10")
+
+	AssertDelete(t, o, testRun1, true)
+	AssertDelete(t, o, testRun2, false)
+	AssertDelete(t, o, testRun3, false)
 }
+
+func TestDeleteDueToNewerRun(t *testing.T) {
+	t.Parallel()
+	o, _ := CreateTestOptions()
+	testRun1 := CreateTestRun(t, o, "168", "gke-terraform-vault", "159")
+	testRun2 := CreateTestRun(t, o, "168", "gke-terraform-vault", "160")
+	testRuns := make([]v1alpha1.TestRun, 0)
+	testRuns = append(testRuns, *testRun1, *testRun2)
+	assert.Equal(t, true, o.ShouldDeleteDueToNewerRun(testRun1, testRuns))
+	testRun4 := CreateTestRun(t, o, "168", "gke-terraform-vault", "161")
+	testRuns = append(testRuns, *testRun4)
+	assert.Equal(t, false, o.ShouldDeleteDueToNewerRun(testRun4, testRuns))
+}
+
 
 func TestShouldDeleteOlderThanDuration(t *testing.T) {
 	t.Parallel()
-	o := CreateTestOptions()
-	cluster := getCluster(t, o, "168", "gke-terraform-vault", "159")
-	cluster.CreationTimestamp.Time = time.Now()
-	assert.Equal(t, false, o.ShouldDeleteOlderThanDuration(cluster))
-	cluster2 := getCluster(t, o, "170", "gke-terraform-vault", "159")
-	cluster2.CreationTimestamp.Time = time.Now().Add(-3 * time.Hour)
-	assert.Equal(t, true, o.ShouldDeleteOlderThanDuration(cluster2))
-	cluster2.Spec.Keep = true
-	assert.Equal(t, false, o.ShouldDeleteOlderThanDuration(cluster2))
+	o, _ := CreateTestOptions()
+	testRun := CreateTestRun(t, o, "168", "gke-terraform-vault", "159")
+	testRun.CreationTimestamp.Time = time.Now()
+	assert.Equal(t, false, o.ShouldDeleteOlderThanDuration(testRun))
+	testRun2 := CreateTestRun(t, o, "170", "gke-terraform-vault", "159")
+	testRun2.CreationTimestamp.Time = time.Now().Add(-3 * time.Hour)
+	assert.Equal(t, true, o.ShouldDeleteOlderThanDuration(testRun2))
+	testRun2.Spec.Keep = true
+	assert.Equal(t, false, o.ShouldDeleteOlderThanDuration(testRun2))
 }
 
 // CreateTestOptions creates an option for tests with a fake client
-func CreateTestOptions() *gc.Options {
+func CreateTestOptions() (*gc.Options, *fakerunner.FakeRunner) {
 	_, o := gc.NewCmdGC()
 	o.TestClient = fake.NewSimpleClientset()
 	o.Namespace = testNamespace
-	return o
+	runner := &fakerunner.FakeRunner{}
+	o.CommandRunner = runner.Run
+	return o, runner
 }
 
 // AssertUpdate asserts we can update the given test run
@@ -88,16 +116,16 @@ func AssertDelete(t *testing.T, o *gc.Options, tr *v1alpha1.TestRun, deleted boo
 				require.Fail(t, "should have deleted test run %s", tr.Name)
 				return
 			}
-			t.Logf("as expected did not delete TestRun %s", tr.Name)			
-			return 
+			t.Logf("as expected did not delete TestRun %s", tr.Name)
+			return
 		}
 	}
 	if !deleted {
 		require.Fail(t, "should not have deleted TestRun %s", tr.Name)
-	}	
+	}
 }
 
-func getCluster(t *testing.T, gco *gc.Options, prNumber string, context string, buildNumber string) *v1alpha1.TestRun {
+func CreateTestRun(t *testing.T, gco *gc.Options, prNumber string, context string, buildNumber string) *v1alpha1.TestRun {
 	_, o := create.NewCmdCreate()
 	o.TestClient = gco.TestClient
 	o.Namespace = gco.Namespace
@@ -113,5 +141,11 @@ func getCluster(t *testing.T, gco *gc.Options, prNumber string, context string, 
 
 	tr := o.TestRun
 	require.NotNil(t, tr, "no TestRun created")
+
+	// when using a fake provider the creation time stamp does not get populated
+	if tr.CreationTimestamp.IsZero() {
+		tr.CreationTimestamp.Time = time.Now()
+		AssertUpdate(t, gco, tr)
+	}
 	return tr
 }

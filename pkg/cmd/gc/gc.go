@@ -7,6 +7,8 @@ import (
 	"github.com/jenkins-x/jx-helpers/pkg/cmdrunner"
 	"github.com/jenkins-x/jx-helpers/pkg/cobras/helper"
 	"github.com/jenkins-x/jx-helpers/pkg/cobras/templates"
+	"github.com/jenkins-x/jx-helpers/pkg/gitclient"
+	"github.com/jenkins-x/jx-helpers/pkg/gitclient/cli"
 	"github.com/jenkins-x/jx-helpers/pkg/termcolor"
 	"github.com/jenkins-x/jx-logging/pkg/log"
 	"github.com/jenkins-x/jx-test/pkg/apis/jxtest/v1alpha1"
@@ -33,9 +35,10 @@ var (
 type Options struct {
 	Namespace     string
 	Duration      time.Duration
-	CommandRunner cmdrunner.CommandRunner
 	Tests         []v1alpha1.TestRun
 	TestClient    versioned.Interface
+	CommandRunner cmdrunner.CommandRunner
+	GitClient     gitclient.Interface
 	Errors        []error
 }
 
@@ -58,12 +61,27 @@ func NewCmdGC() (*cobra.Command, *Options) {
 	return cmd, o
 }
 
-// Run implements the command
-func (o *Options) Run() error {
+// Validate checks everything is configured correctly and we can lazy create any missing clients
+func (o *Options) Validate() error {
 	var err error
 	o.TestClient, o.Namespace, err = testclients.LazyCreateClient(o.TestClient, o.Namespace)
 	if err != nil {
 		return errors.Wrapf(err, "failed to create test client")
+	}
+	if o.CommandRunner == nil {
+		o.CommandRunner = cmdrunner.DefaultCommandRunner
+	}
+	if o.GitClient == nil {
+		o.GitClient = cli.NewCLIClient("", o.CommandRunner)
+	}
+	return nil
+}
+
+// Run implements the command
+func (o *Options) Run() error {
+	err := o.Validate()
+	if err != nil {
+		return errors.Wrapf(err, "failed to validate setup")
 	}
 
 	testList, err := o.TestClient.JxtestV1alpha1().TestRuns(o.Namespace).List(metav1.ListOptions{})
@@ -81,32 +99,36 @@ func (o *Options) GC() error {
 			continue
 		}
 		if c.Spec.Delete {
-			o.deleteTest(c)
+			o.DeleteTestRun(c)
 			continue
 		}
 
 		if o.ShouldDeleteOlderThanDuration(c) {
-			o.deleteTest(c)
+			o.DeleteTestRun(c)
 			continue
 		}
 
 		if o.ShouldDeleteDueToNewerRun(c, o.Tests) {
-			o.deleteTest(c)
+			o.DeleteTestRun(c)
 		}
+	}
+
+	for _, e := range o.Errors {
+		log.Logger().Error(e.Error())
 	}
 	return nil
 }
 
-// ShouldDeleteOlderThanDuration returns true if the cluster is older than the delete duration and does not have a keep label
-func (o *Options) ShouldDeleteOlderThanDuration(cluster *v1alpha1.TestRun) bool {
-	if cluster.Spec.Keep {
+// ShouldDeleteOlderThanDuration returns true if the testRun is older than the delete duration and does not have a keep label
+func (o *Options) ShouldDeleteOlderThanDuration(testRun *v1alpha1.TestRun) bool {
+	if testRun.Spec.Keep {
 		return false
 	}
-	if cluster.Spec.Delete {
+	if testRun.Spec.Delete {
 		return true
 	}
 
-	created := cluster.CreationTimestamp.Time
+	created := testRun.CreationTimestamp.Time
 	ttlExceededDate := created.Add(o.Duration)
 	now := time.Now()
 	if now.After(ttlExceededDate) {
@@ -115,22 +137,23 @@ func (o *Options) ShouldDeleteOlderThanDuration(cluster *v1alpha1.TestRun) bool 
 	return false
 }
 
-// ShouldDeleteDueToNewerRun returns true if a cluster with a higher build number exists
-func (o *Options) ShouldDeleteDueToNewerRun(cluster *v1alpha1.TestRun, clusters []v1alpha1.TestRun) bool {
-	currentBuildNumber := cluster.Spec.BuildNumber
+// ShouldDeleteDueToNewerRun returns true if a testRun with a higher build number exists
+func (o *Options) ShouldDeleteDueToNewerRun(testRun *v1alpha1.TestRun, testRuns []v1alpha1.TestRun) bool {
+	currentBuildNumber := testRun.Spec.BuildNumber
 	if currentBuildNumber <= 0 {
-		log.Logger().Warnf("test %s does not have a spec.buildNumber populated", cluster.Name)
+		log.Logger().Warnf("test %s does not have a spec.buildNumber populated", testRun.Name)
 		return false
 	}
 
-	testKind := cluster.Spec.TestKind()
+	testKind := testRun.Spec.TestKind()
 
-	for _, ec := range clusters {
-		existingCluster := ec
-		// Check for same branch, context and strigger source  URL
-		existingTestKind := existingCluster.Spec.TestKind()
+	for _, ec := range testRuns {
+		existingTestRun := ec
+
+		// check for same branch, context and trigger source  URL
+		existingTestKind := existingTestRun.Spec.TestKind()
 		if existingTestKind == testKind {
-			existingBuildNumber := existingCluster.Spec.BuildNumber
+			existingBuildNumber := existingTestRun.Spec.BuildNumber
 			// Delete the older build
 			if existingBuildNumber > 0 && currentBuildNumber < existingBuildNumber {
 				return true
@@ -140,11 +163,43 @@ func (o *Options) ShouldDeleteDueToNewerRun(cluster *v1alpha1.TestRun, clusters 
 	return false
 }
 
-func (o *Options) deleteTest(c *v1alpha1.TestRun) {
-	log.Logger().Infof("removing test %s", termcolor.ColorInfo(c.Name))
+// DeleteTestRun deletes the test run resources and the CRD
+func (o *Options) DeleteTestRun(testRun *v1alpha1.TestRun) {
+	name := testRun.Name
+	ns := o.Namespace
+	log.Logger().Infof("removing TestsRun resources for %s in namespace %s", termcolor.ColorInfo(name), termcolor.ColorInfo(ns))
 
-	err := o.TestClient.JxtestV1alpha1().TestRuns(o.Namespace).Delete(c.Name, nil)
+	bin := testRun.Spec.RemoveScript
+	if bin == "" {
+		bin = "bin/destroy.sh"
+		log.Logger().Warnf("the TestRun %s does not have a spec.removeScript so using default: %s", name, bin)
+	}
+
+	testURL := testRun.Spec.TestSource.URL
+	if testURL == "" {
+		o.Errors = append(o.Errors, errors.Errorf("TestRun %s has no spec.testSource.url", name))
+		return
+	}
+
+	dir, err := gitclient.CloneToDir(o.GitClient, testURL, "")
 	if err != nil {
-		o.Errors = append(o.Errors, err)
+		o.Errors = append(o.Errors, errors.Wrapf(err, "failed to clone %s for TestRun %s in namespace %s", testURL, name, ns))
+		return
+	}
+
+	c := &cmdrunner.Command{
+		Dir:  dir,
+		Name: bin,
+		Env:  testRun.Spec.Env,
+	}
+	_, err = o.CommandRunner(c)
+	if err != nil {
+		o.Errors = append(o.Errors, errors.Wrapf(err, "failed to run %s in git clone of %s for TestRun %s in namespace %s", bin, testURL, name, ns))
+		return
+	}
+
+	err = o.TestClient.JxtestV1alpha1().TestRuns(ns).Delete(name, nil)
+	if err != nil {
+		o.Errors = append(o.Errors, errors.Wrapf(err, "failed to delete TestRun %s in namespace %s", name, ns))
 	}
 }
