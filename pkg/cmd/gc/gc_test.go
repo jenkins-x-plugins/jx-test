@@ -7,6 +7,7 @@ import (
 
 	"github.com/alecthomas/assert"
 	"github.com/jenkins-x/jx-test/pkg/apis/jxtest/v1alpha1"
+	"github.com/jenkins-x/jx-test/pkg/client/clientset/versioned/fake"
 	"github.com/jenkins-x/jx-test/pkg/cmd/gc"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -14,14 +15,14 @@ import (
 
 func TestDeleteDueToNewerRun(t *testing.T) {
 	t.Parallel()
-	o := gc.Options{}
+	o := CreateTestOptions()
 	cluster1 := getCluster(t, "168", "gke-terraform-vault", "159")
 	cluster2 := getCluster(t, "168", "gke-terraform-vault", "160")
-	clusters := make([]*v1alpha1.TestRun, 0)
-	clusters = append(clusters, cluster1, cluster2)
+	clusters := make([]v1alpha1.TestRun, 0)
+	clusters = append(clusters, *cluster1, *cluster2)
 	assert.Equal(t, true, o.ShouldDeleteDueToNewerRun(cluster1, clusters))
 	cluster4 := getCluster(t, "168", "gke-terraform-vault", "160")
-	clusters = append(clusters, cluster4)
+	clusters = append(clusters, *cluster4)
 	assert.Equal(t, false, o.ShouldDeleteDueToNewerRun(cluster4, clusters))
 }
 
@@ -29,7 +30,7 @@ func TestDeleteDueToNewerRun(t *testing.T) {
 /*
 func TestShouldDeleteMarkedCluster(t *testing.T) {
 	t.Parallel()
-	o := gc.Options{}
+	o := CreateTestOptions()
 	cluster := getCluster(t, "168", "gke-terraform-vault", "159")
 	cluster2 := getCluster(t, "170", "gke-terraform-vault", "159")
 	assert.Equal(t, false, o.ShouldDeleteMarkedCluster(cluster))
@@ -42,8 +43,7 @@ func TestShouldDeleteMarkedCluster(t *testing.T) {
 
 func TestShouldDeleteOlderThanDuration(t *testing.T) {
 	t.Parallel()
-	o := gc.Options{}
-	o.Duration = 2
+	o := CreateTestOptions()
 	cluster := getCluster(t, "168", "gke-terraform-vault", "159")
 	cluster.CreationTimestamp.Time = time.Now()
 	assert.Equal(t, false, o.ShouldDeleteOlderThanDuration(cluster))
@@ -52,6 +52,13 @@ func TestShouldDeleteOlderThanDuration(t *testing.T) {
 	assert.Equal(t, true, o.ShouldDeleteOlderThanDuration(cluster2))
 	cluster2.Spec.Keep = true
 	assert.Equal(t, false, o.ShouldDeleteOlderThanDuration(cluster2))
+}
+
+// CreateTestOptions creates an option for tests with a fake client
+func CreateTestOptions() *gc.Options {
+	_, o := gc.NewCmdGC()
+	o.TestClient = fake.NewSimpleClientset()
+	return o
 }
 
 func getCluster(t *testing.T, prNumber string, context string, buildNumber string) *v1alpha1.TestRun {

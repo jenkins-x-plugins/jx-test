@@ -10,8 +10,13 @@ import (
 	"github.com/jenkins-x/jx-helpers/pkg/termcolor"
 	"github.com/jenkins-x/jx-logging/pkg/log"
 	"github.com/jenkins-x/jx-test/pkg/apis/jxtest/v1alpha1"
+	"github.com/jenkins-x/jx-test/pkg/client/clientset/versioned"
 	"github.com/jenkins-x/jx-test/pkg/root"
+	"github.com/jenkins-x/jx-test/pkg/testclients"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var (
@@ -29,7 +34,8 @@ type Options struct {
 	Namespace     string
 	Duration      time.Duration
 	CommandRunner cmdrunner.CommandRunner
-	Tests         []*v1alpha1.TestRun
+	Tests         []v1alpha1.TestRun
+	TestClient   versioned.Interface
 }
 
 // NewCmdGC creates a command object for the command
@@ -53,11 +59,24 @@ func NewCmdGC() (*cobra.Command, *Options) {
 
 // Run implements the command
 func (o *Options) Run() error {
-	return nil
+	var err error
+	o.TestClient, o.Namespace, err = testclients.LazyCreateClient(o.TestClient, o.Namespace)
+	if err != nil {
+		return errors.Wrapf(err, "failed to create test client")
+	}
+	
+	testList, err := o.TestClient.JxtestV1alpha1().TestRuns(o.Namespace).List(metav1.ListOptions{})
+	if err != nil && !apierrors.IsNotFound(err) {
+		return errors.Wrapf(err, "failed to list TestRun instances in namespace %s", o.Namespace)
+	}
+	o.Tests = testList.Items
+	return o.GC()
 }
 
+
 func (o *Options) GC() error {
-	for _, c := range o.Tests {
+	for i := range o.Tests {
+		c := &o.Tests[i]
 		if c.Spec.Keep {
 			continue
 		}
@@ -89,7 +108,7 @@ func (o *Options) ShouldDeleteOlderThanDuration(cluster *v1alpha1.TestRun) bool 
 
 	created := cluster.CreationTimestamp.Time
 	ttlExceededDate := created.Add(o.Duration)
-	now := time.Now().UTC()
+	now := time.Now()
 	if now.After(ttlExceededDate) {
 		return true
 	}
@@ -97,7 +116,7 @@ func (o *Options) ShouldDeleteOlderThanDuration(cluster *v1alpha1.TestRun) bool 
 }
 
 // ShouldDeleteDueToNewerRun returns true if a cluster with a higher build number exists
-func (o *Options) ShouldDeleteDueToNewerRun(cluster *v1alpha1.TestRun, clusters []*v1alpha1.TestRun) bool {
+func (o *Options) ShouldDeleteDueToNewerRun(cluster *v1alpha1.TestRun, clusters []v1alpha1.TestRun) bool {
 	currentBuildNumber := cluster.Spec.BuildNumber
 	if currentBuildNumber <= 0 {
 		log.Logger().Warnf("test %s does not have a spec.buildNumber populated", cluster.Name)
