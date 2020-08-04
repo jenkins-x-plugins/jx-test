@@ -20,7 +20,7 @@ Or you can use `jx test` directly in the [Jenkins X 3.x CLI](https://github.com/
 To be able to use the [jx-test commands](https://github.com/jenkins-x/jx-test/blob/master/docs/cmd/jx-test.md) you will need to install the `TestRun` CRD in your kubernetes cluster...
 
 ```bash 
-kubectl apply -f https://raw.githubusercontent.com/jenkins-x/jx-cli/master/crds/test-crd.yaml
+kubectl apply -f https://raw.githubusercontent.com/jenkins-x/jx-test/master/crds/test-crd.yaml
 ```
 
 ## Commands
