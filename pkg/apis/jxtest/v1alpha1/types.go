@@ -67,6 +67,9 @@ func (t *TestRunSpec) TestKind() string {
 
 // Validate populates any missing values from environment variables
 func (t *TestRunSpec) Validate() error {
+	if t.TestSource.URL == "" {
+		return errors.Errorf("missing spec.testSource.url")
+	}
 	// lets default details of the repository and branch we are creating the test from
 	if t.TriggerSource.URL == "" {
 		t.TriggerSource.URL = t.Env["SOURCE_URL"]

@@ -7,6 +7,8 @@ import (
 
 	"github.com/jenkins-x/jx-helpers/pkg/cobras/helper"
 	"github.com/jenkins-x/jx-helpers/pkg/cobras/templates"
+	"github.com/jenkins-x/jx-helpers/pkg/gitclient/giturl"
+	"github.com/jenkins-x/jx-helpers/pkg/kube/naming"
 	"github.com/jenkins-x/jx-helpers/pkg/options"
 	"github.com/jenkins-x/jx-test/pkg/apis/jxtest/v1alpha1"
 	"github.com/jenkins-x/jx-test/pkg/client/clientset/versioned"
@@ -33,6 +35,7 @@ type Options struct {
 	RemoveScript string
 	Env          []string
 	TestClient   versioned.Interface
+	TestRun      *v1alpha1.TestRun
 }
 
 // NewCmdCreate creates a command object for the command
@@ -68,7 +71,7 @@ func (o *Options) Run() error {
 		return errors.Wrapf(err, "failed to populate the TestRun resource")
 	}
 
-	_, err = o.TestClient.JxtestV1alpha1().TestRuns(o.Namespace).Create(test)
+	o.TestRun, err = o.TestClient.JxtestV1alpha1().TestRuns(o.Namespace).Create(test)
 	if err != nil {
 		return errors.Wrapf(err, "failed to create the TestRun CRD")
 	}
@@ -103,5 +106,17 @@ func (o *Options) PopulateTest(test *v1alpha1.TestRun) error {
 			test.Spec.Env[values[0]] = values[1]
 		}
 	}
-	return test.Spec.Validate()
+	err := test.Spec.Validate()
+	if err != nil {
+		return errors.Wrapf(err, "failed to validate TestRun spec")
+	}
+	if test.Name == "" {
+		gitInfo, err := giturl.ParseGitURL(o.TestGitURL)
+		if err != nil {
+			return errors.Wrapf(err, "failed to parse test git url %s", o.TestGitURL)
+		}
+		names := []string{gitInfo.Organisation, gitInfo.Name}
+		test.Name = naming.ToValidName(strings.Join(names, "-"))
+	}
+	return nil
 }

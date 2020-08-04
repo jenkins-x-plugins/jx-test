@@ -35,7 +35,8 @@ type Options struct {
 	Duration      time.Duration
 	CommandRunner cmdrunner.CommandRunner
 	Tests         []v1alpha1.TestRun
-	TestClient   versioned.Interface
+	TestClient    versioned.Interface
+	Errors        []error
 }
 
 // NewCmdGC creates a command object for the command
@@ -64,7 +65,7 @@ func (o *Options) Run() error {
 	if err != nil {
 		return errors.Wrapf(err, "failed to create test client")
 	}
-	
+
 	testList, err := o.TestClient.JxtestV1alpha1().TestRuns(o.Namespace).List(metav1.ListOptions{})
 	if err != nil && !apierrors.IsNotFound(err) {
 		return errors.Wrapf(err, "failed to list TestRun instances in namespace %s", o.Namespace)
@@ -72,7 +73,6 @@ func (o *Options) Run() error {
 	o.Tests = testList.Items
 	return o.GC()
 }
-
 
 func (o *Options) GC() error {
 	for i := range o.Tests {
@@ -142,4 +142,9 @@ func (o *Options) ShouldDeleteDueToNewerRun(cluster *v1alpha1.TestRun, clusters 
 
 func (o *Options) deleteTest(c *v1alpha1.TestRun) {
 	log.Logger().Infof("removing test %s", termcolor.ColorInfo(c.Name))
+
+	err := o.TestClient.JxtestV1alpha1().TestRuns(o.Namespace).Delete(c.Name, nil)
+	if err != nil {
+		o.Errors = append(o.Errors, err)
+	}
 }
