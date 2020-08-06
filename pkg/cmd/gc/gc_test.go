@@ -12,6 +12,7 @@ import (
 	"github.com/jenkins-x/jx-test/pkg/client/clientset/versioned/fake"
 	"github.com/jenkins-x/jx-test/pkg/cmd/create"
 	"github.com/jenkins-x/jx-test/pkg/cmd/gc"
+	"github.com/jenkins-x/jx-test/pkg/testruntesters"
 	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -72,7 +73,6 @@ func TestDeleteDueToNewerRun(t *testing.T) {
 	assert.Equal(t, false, o.ShouldDeleteDueToNewerRun(testRun4, testRuns))
 }
 
-
 func TestShouldDeleteOlderThanDuration(t *testing.T) {
 	t.Parallel()
 	o, _ := CreateTestOptions()
@@ -98,8 +98,7 @@ func CreateTestOptions() (*gc.Options, *fakerunner.FakeRunner) {
 
 // AssertUpdate asserts we can update the given test run
 func AssertUpdate(t *testing.T, o *gc.Options, tr *v1alpha1.TestRun) {
-	_, err := o.TestClient.JxtestV1alpha1().TestRuns(o.Namespace).Update(tr)
-	require.NoError(t, err, "failed to update TestRun %s", tr.Name)
+	testruntesters.RequireTestRunUpdate(t, o.TestClient, o.Namespace, tr)
 }
 
 func AssertDelete(t *testing.T, o *gc.Options, tr *v1alpha1.TestRun, deleted bool) {

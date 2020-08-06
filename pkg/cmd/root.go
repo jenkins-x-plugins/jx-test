@@ -4,6 +4,7 @@ import (
 	"github.com/jenkins-x/jx-helpers/pkg/cobras"
 	"github.com/jenkins-x/jx-logging/pkg/log"
 	"github.com/jenkins-x/jx-test/pkg/cmd/create"
+	"github.com/jenkins-x/jx-test/pkg/cmd/deletecmd"
 	"github.com/jenkins-x/jx-test/pkg/cmd/gc"
 	"github.com/jenkins-x/jx-test/pkg/cmd/version"
 	"github.com/jenkins-x/jx-test/pkg/root"
@@ -24,6 +25,7 @@ func Main() *cobra.Command {
 	}
 	cmd.AddCommand(cobras.SplitCommand(create.NewCmdCreate()))
 	cmd.AddCommand(cobras.SplitCommand(gc.NewCmdGC()))
+	cmd.AddCommand(cobras.SplitCommand(deletecmd.NewCmdDelete()))
 	cmd.AddCommand(cobras.SplitCommand(version.NewCmdVersion()))
 	return cmd
 }

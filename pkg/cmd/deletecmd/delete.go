@@ -1,0 +1,90 @@
+package deletecmd
+
+import (
+	"fmt"
+
+	"github.com/jenkins-x/jx-helpers/pkg/cobras/helper"
+	"github.com/jenkins-x/jx-helpers/pkg/cobras/templates"
+	"github.com/jenkins-x/jx-helpers/pkg/options"
+	"github.com/jenkins-x/jx-helpers/pkg/termcolor"
+	"github.com/jenkins-x/jx-logging/pkg/log"
+	"github.com/jenkins-x/jx-test/pkg/root"
+	"github.com/jenkins-x/jx-test/pkg/testclients/deleter"
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+var (
+	cmdLong = templates.LongDesc(`
+		"Deletes the TestRun cloud resources and CRD unless its been marked as keep: true
+`)
+
+	cmdExample = templates.Examples(`
+		%s delete --test-url $GITOPS_REPO --dir=. --script=bin/destroy.sh	
+	`)
+)
+
+// Options the options for the command
+type Options struct {
+	deleter.Options
+	Dir          string
+	TestGitURL   string
+	RemoveScript string
+}
+
+// NewCmdGC creates a command object for the command
+func NewCmdDelete() (*cobra.Command, *Options) {
+	o := &Options{}
+
+	cmd := &cobra.Command{
+		Use:     "delete",
+		Short:   "Deletes the TestRun cloud resources and CRD unless its been marked as keep: true",
+		Aliases: []string{"rm", "remove", "del"},
+		Long:    cmdLong,
+		Example: fmt.Sprintf(cmdExample, root.BinaryName),
+		Run: func(cmd *cobra.Command, args []string) {
+			err := o.Run()
+			helper.CheckErr(err)
+		},
+	}
+	cmd.Flags().StringVarP(&o.Namespace, "ns", "n", "", "the namespace to filter the TestRun resources")
+	cmd.Flags().StringVarP(&o.TestGitURL, "test-url", "u", "", "the git URL of the test case which is used to remove the resources")
+	cmd.Flags().StringVarP(&o.Dir, "dir", "d", ".", "the directory of the git clone")
+	cmd.Flags().StringVarP(&o.RemoveScript, "script", "s", "", "the script in the test git url used to remove the resources")
+	return cmd, o
+}
+
+// Run implements the command
+func (o *Options) Run() error {
+	if o.TestGitURL == "" {
+		return options.MissingOption("test-url")
+	}
+	err := o.Options.Validate()
+	if err != nil {
+		return errors.Wrapf(err, "failed to validate setup")
+	}
+
+	testList, err := o.TestClient.JxtestV1alpha1().TestRuns(o.Namespace).List(metav1.ListOptions{})
+	if err != nil && !apierrors.IsNotFound(err) {
+		return errors.Wrapf(err, "failed to list TestRun instances in namespace %s", o.Namespace)
+	}
+
+	for _, tr := range testList.Items {
+		if tr.Spec.TestSource.URL == o.TestGitURL {
+			if tr.Spec.Keep {
+				log.Logger().Infof("not removing TestRun %s in namespace %s as it is marked as KEEP", termcolor.ColorInfo(tr.Name), termcolor.ColorInfo(o.Namespace))
+				return nil
+			}
+
+			err = o.Options.Delete(&tr, o.Dir, o.RemoveScript)
+			if err != nil {
+				return errors.Wrapf(err, "failed to remove TestRun %s in namespace %s", tr.Name, o.Namespace)
+			}
+			log.Logger().Infof("removed TestRun %s in namespace %s", termcolor.ColorInfo(tr.Name), termcolor.ColorInfo(o.Namespace))
+			return nil
+		}
+	}
+	return errors.Errorf("could not find a TestRun in namespace %s which has spec.testSource.url = %s", o.Namespace, o.TestGitURL)
+}

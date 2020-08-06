@@ -24,7 +24,7 @@ var (
 `)
 
 	cmdExample = templates.Examples(`
-		%s create
+		%s create --test-url https://github.com/myorg/mytest.git
 	`)
 )
 
@@ -54,7 +54,7 @@ func NewCmdCreate() (*cobra.Command, *Options) {
 	}
 	cmd.Flags().StringVarP(&o.Namespace, "ns", "n", "", "the namespace to filter the TestRun resources")
 	cmd.Flags().StringVarP(&o.TestGitURL, "test-url", "u", "", "the git URL of the test case which is used to remove the resources")
-	cmd.Flags().StringVarP(&o.RemoveScript, "remove-script", "", "bin/destroy.sh", "the script in the test git url used to remove the resources")
+	cmd.Flags().StringVarP(&o.RemoveScript, "remove-script", "s", "bin/destroy.sh", "the script in the test git url used to remove the resources")
 	return cmd, o
 }
 
