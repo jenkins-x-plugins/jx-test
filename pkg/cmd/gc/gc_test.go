@@ -109,7 +109,8 @@ func AssertDelete(t *testing.T, o *gc.Options, tr *v1alpha1.TestRun, deleted boo
 		err = nil
 	}
 	require.NoError(t, err, "failed to find TestRuns in namespace %s", o.Namespace)
-	for _, r := range testList.Items {
+	for i := 0; i < len(testList.Items); i++ {
+		r := testList.Items[i]
 		if r.Name == tr.Name {
 			if deleted {
 				require.Fail(t, "should have deleted test run %s", tr.Name)
@@ -124,7 +125,7 @@ func AssertDelete(t *testing.T, o *gc.Options, tr *v1alpha1.TestRun, deleted boo
 	}
 }
 
-func CreateTestRun(t *testing.T, gco *gc.Options, prNumber string, context string, buildNumber string) *v1alpha1.TestRun {
+func CreateTestRun(t *testing.T, gco *gc.Options, prNumber, context, buildNumber string) *v1alpha1.TestRun {
 	_, o := create.NewCmdCreate()
 	o.TestClient = gco.TestClient
 	o.Namespace = gco.Namespace

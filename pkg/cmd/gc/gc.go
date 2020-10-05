@@ -107,10 +107,7 @@ func (o *Options) ShouldDeleteOlderThanDuration(testRun *v1alpha1.TestRun) bool 
 	created := testRun.CreationTimestamp.Time
 	ttlExceededDate := created.Add(o.Duration)
 	now := time.Now()
-	if now.After(ttlExceededDate) {
-		return true
-	}
-	return false
+	return now.After(ttlExceededDate)
 }
 
 // ShouldDeleteDueToNewerRun returns true if a testRun with a higher build number exists
@@ -122,9 +119,8 @@ func (o *Options) ShouldDeleteDueToNewerRun(testRun *v1alpha1.TestRun, testRuns 
 	}
 
 	testKind := testRun.Spec.TestKind()
-
-	for _, ec := range testRuns {
-		existingTestRun := ec
+	for i := 0; i < len(testRuns); i++ {
+		existingTestRun := testRuns[i]
 
 		// check for same branch, context and trigger source  URL
 		existingTestKind := existingTestRun.Spec.TestKind()

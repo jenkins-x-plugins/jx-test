@@ -37,7 +37,7 @@ func (o *Options) Validate() error {
 
 // Delete deletes the test run resources and the CRD
 // can pass in the dir and bin script if they already exist locally
-func (o *Options) Delete(testRun *v1alpha1.TestRun, dir string, bin string) error {
+func (o *Options) Delete(testRun *v1alpha1.TestRun, dir, bin string) error {
 	name := testRun.Name
 	ns := o.Namespace
 	log.Logger().Infof("removing TestsRun resources for %s in namespace %s", termcolor.ColorInfo(name), termcolor.ColorInfo(ns))
