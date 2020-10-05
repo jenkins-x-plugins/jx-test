@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jenkins-x/jx-helpers/pkg/cobras/helper"
-	"github.com/jenkins-x/jx-helpers/pkg/cobras/templates"
-	"github.com/jenkins-x/jx-logging/pkg/log"
+	"github.com/jenkins-x/jx-helpers/v3/pkg/cobras/helper"
+	"github.com/jenkins-x/jx-helpers/v3/pkg/cobras/templates"
+	"github.com/jenkins-x/jx-logging/v3/pkg/log"
 	"github.com/jenkins-x/jx-test/pkg/apis/jxtest/v1alpha1"
 	"github.com/jenkins-x/jx-test/pkg/root"
 	"github.com/jenkins-x/jx-test/pkg/testclients/deleter"
@@ -107,10 +107,7 @@ func (o *Options) ShouldDeleteOlderThanDuration(testRun *v1alpha1.TestRun) bool 
 	created := testRun.CreationTimestamp.Time
 	ttlExceededDate := created.Add(o.Duration)
 	now := time.Now()
-	if now.After(ttlExceededDate) {
-		return true
-	}
-	return false
+	return now.After(ttlExceededDate)
 }
 
 // ShouldDeleteDueToNewerRun returns true if a testRun with a higher build number exists
@@ -122,9 +119,8 @@ func (o *Options) ShouldDeleteDueToNewerRun(testRun *v1alpha1.TestRun, testRuns 
 	}
 
 	testKind := testRun.Spec.TestKind()
-
-	for _, ec := range testRuns {
-		existingTestRun := ec
+	for i := 0; i < len(testRuns); i++ {
+		existingTestRun := testRuns[i]
 
 		// check for same branch, context and trigger source  URL
 		existingTestKind := existingTestRun.Spec.TestKind()

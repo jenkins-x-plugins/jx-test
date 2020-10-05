@@ -3,11 +3,11 @@ package deletecmd
 import (
 	"fmt"
 
-	"github.com/jenkins-x/jx-helpers/pkg/cobras/helper"
-	"github.com/jenkins-x/jx-helpers/pkg/cobras/templates"
-	"github.com/jenkins-x/jx-helpers/pkg/options"
-	"github.com/jenkins-x/jx-helpers/pkg/termcolor"
-	"github.com/jenkins-x/jx-logging/pkg/log"
+	"github.com/jenkins-x/jx-helpers/v3/pkg/cobras/helper"
+	"github.com/jenkins-x/jx-helpers/v3/pkg/cobras/templates"
+	"github.com/jenkins-x/jx-helpers/v3/pkg/options"
+	"github.com/jenkins-x/jx-helpers/v3/pkg/termcolor"
+	"github.com/jenkins-x/jx-logging/v3/pkg/log"
 	"github.com/jenkins-x/jx-test/pkg/root"
 	"github.com/jenkins-x/jx-test/pkg/testclients/deleter"
 	"github.com/pkg/errors"
@@ -70,21 +70,22 @@ func (o *Options) Run() error {
 	if err != nil && !apierrors.IsNotFound(err) {
 		return errors.Wrapf(err, "failed to list TestRun instances in namespace %s", o.Namespace)
 	}
-
-	for _, tr := range testList.Items {
-		if tr.Spec.TestSource.URL == o.TestGitURL {
-			if tr.Spec.Keep {
-				log.Logger().Infof("not removing TestRun %s in namespace %s as it is marked as KEEP", termcolor.ColorInfo(tr.Name), termcolor.ColorInfo(o.Namespace))
-				return nil
-			}
-
-			err = o.Options.Delete(&tr, o.Dir, o.RemoveScript)
-			if err != nil {
-				return errors.Wrapf(err, "failed to remove TestRun %s in namespace %s", tr.Name, o.Namespace)
-			}
-			log.Logger().Infof("removed TestRun %s in namespace %s", termcolor.ColorInfo(tr.Name), termcolor.ColorInfo(o.Namespace))
+	for i := 0; i < len(testList.Items); i++ {
+		tr := testList.Items[i]
+		if tr.Spec.TestSource.URL != o.TestGitURL {
+			continue
+		}
+		if tr.Spec.Keep {
+			log.Logger().Infof("not removing TestRun %s in namespace %s as it is marked as KEEP", termcolor.ColorInfo(tr.Name), termcolor.ColorInfo(o.Namespace))
 			return nil
 		}
+
+		err = o.Options.Delete(&tr, o.Dir, o.RemoveScript)
+		if err != nil {
+			return errors.Wrapf(err, "failed to remove TestRun %s in namespace %s", tr.Name, o.Namespace)
+		}
+		log.Logger().Infof("removed TestRun %s in namespace %s", termcolor.ColorInfo(tr.Name), termcolor.ColorInfo(o.Namespace))
+		return nil
 	}
 	return errors.Errorf("could not find a TestRun in namespace %s which has spec.testSource.url = %s", o.Namespace, o.TestGitURL)
 }

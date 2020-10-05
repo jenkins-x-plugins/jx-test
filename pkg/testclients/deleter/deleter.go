@@ -1,11 +1,11 @@
 package deleter
 
 import (
-	"github.com/jenkins-x/jx-helpers/pkg/cmdrunner"
-	"github.com/jenkins-x/jx-helpers/pkg/gitclient"
-	"github.com/jenkins-x/jx-helpers/pkg/gitclient/cli"
-	"github.com/jenkins-x/jx-helpers/pkg/termcolor"
-	"github.com/jenkins-x/jx-logging/pkg/log"
+	"github.com/jenkins-x/jx-helpers/v3/pkg/cmdrunner"
+	"github.com/jenkins-x/jx-helpers/v3/pkg/gitclient"
+	"github.com/jenkins-x/jx-helpers/v3/pkg/gitclient/cli"
+	"github.com/jenkins-x/jx-helpers/v3/pkg/termcolor"
+	"github.com/jenkins-x/jx-logging/v3/pkg/log"
 	"github.com/jenkins-x/jx-test/pkg/apis/jxtest/v1alpha1"
 	"github.com/jenkins-x/jx-test/pkg/client/clientset/versioned"
 	"github.com/jenkins-x/jx-test/pkg/testclients"
@@ -37,7 +37,7 @@ func (o *Options) Validate() error {
 
 // Delete deletes the test run resources and the CRD
 // can pass in the dir and bin script if they already exist locally
-func (o *Options) Delete(testRun *v1alpha1.TestRun, dir string, bin string) error {
+func (o *Options) Delete(testRun *v1alpha1.TestRun, dir, bin string) error {
 	name := testRun.Name
 	ns := o.Namespace
 	log.Logger().Infof("removing TestsRun resources for %s in namespace %s", termcolor.ColorInfo(name), termcolor.ColorInfo(ns))
