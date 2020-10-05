@@ -3,6 +3,7 @@
 package v1alpha1
 
 import (
+	"context"
 	"time"
 
 	v1alpha1 "github.com/jenkins-x/jx-test/pkg/apis/jxtest/v1alpha1"
@@ -55,7 +56,7 @@ func (c *testRuns) Get(name string, options v1.GetOptions) (result *v1alpha1.Tes
 		Resource("testruns").
 		Name(name).
 		VersionedParams(&options, scheme.ParameterCodec).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -72,7 +73,7 @@ func (c *testRuns) List(opts v1.ListOptions) (result *v1alpha1.TestRunList, err 
 		Resource("testruns").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -89,7 +90,7 @@ func (c *testRuns) Watch(opts v1.ListOptions) (watch.Interface, error) {
 		Resource("testruns").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Watch()
+		Watch(context.TODO())
 }
 
 // Create takes the representation of a testRun and creates it.  Returns the server's representation of the testRun, and an error, if there is any.
@@ -99,7 +100,7 @@ func (c *testRuns) Create(testRun *v1alpha1.TestRun) (result *v1alpha1.TestRun, 
 		Namespace(c.ns).
 		Resource("testruns").
 		Body(testRun).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -112,7 +113,7 @@ func (c *testRuns) Update(testRun *v1alpha1.TestRun) (result *v1alpha1.TestRun, 
 		Resource("testruns").
 		Name(testRun.Name).
 		Body(testRun).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -128,7 +129,7 @@ func (c *testRuns) UpdateStatus(testRun *v1alpha1.TestRun) (result *v1alpha1.Tes
 		Name(testRun.Name).
 		SubResource("status").
 		Body(testRun).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -140,7 +141,7 @@ func (c *testRuns) Delete(name string, options *v1.DeleteOptions) error {
 		Resource("testruns").
 		Name(name).
 		Body(options).
-		Do().
+		Do(context.TODO()).
 		Error()
 }
 
@@ -156,7 +157,7 @@ func (c *testRuns) DeleteCollection(options *v1.DeleteOptions, listOptions v1.Li
 		VersionedParams(&listOptions, scheme.ParameterCodec).
 		Timeout(timeout).
 		Body(options).
-		Do().
+		Do(context.TODO()).
 		Error()
 }
 
@@ -169,7 +170,7 @@ func (c *testRuns) Patch(name string, pt types.PatchType, data []byte, subresour
 		SubResource(subresources...).
 		Name(name).
 		Body(data).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }

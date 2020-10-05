@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/alecthomas/assert"
-	"github.com/jenkins-x/jx-helpers/pkg/cmdrunner/fakerunner"
+	"github.com/jenkins-x/jx-helpers/v3/pkg/cmdrunner/fakerunner"
 	"github.com/jenkins-x/jx-test/pkg/apis/jxtest/v1alpha1"
 	"github.com/jenkins-x/jx-test/pkg/client/clientset/versioned/fake"
 	"github.com/jenkins-x/jx-test/pkg/cmd/create"
