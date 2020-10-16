@@ -72,9 +72,12 @@ func (t *TestRunSpec) Validate() error {
 	}
 	// lets default details of the repository and branch we are creating the test from
 	if t.TriggerSource.URL == "" {
-		t.TriggerSource.URL = t.Env["SOURCE_URL"]
+		t.TriggerSource.URL = t.Env["REPO_URL"]
 		if t.TriggerSource.URL == "" {
-			return errors.Errorf("no $SOURCE_URL value")
+			t.TriggerSource.URL = t.Env["SOURCE_URL"]
+		}
+		if t.TriggerSource.URL == "" {
+			return errors.Errorf("no $REPO_URL or $SOURCE_URL value")
 		}
 	}
 	if t.Branch == "" {

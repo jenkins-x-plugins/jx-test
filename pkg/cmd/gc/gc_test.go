@@ -134,7 +134,7 @@ func CreateTestRun(t *testing.T, gco *gc.Options, prNumber, context, buildNumber
 		"BRANCH_NAME=PR-" + prNumber,
 		"BUILD_NUMBER=" + buildNumber,
 		"PIPELINE_CONTEXT=" + context,
-		"SOURCE_URL=https://github.com/jenkins-x/jx3-versions",
+		"REPO_URL=https://github.com/jenkins-x/jx3-versions",
 	}
 	err := o.Run()
 	require.NoError(t, err, "failed to create TestRun for PR %s context %s buildNumber", prNumber, context, buildNumber)

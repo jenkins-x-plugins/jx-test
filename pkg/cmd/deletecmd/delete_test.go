@@ -19,7 +19,7 @@ func TestDelete(t *testing.T) {
 		"BRANCH_NAME=PR-1234",
 		"BUILD_NUMBER=3",
 		"PIPELINE_CONTEXT=gke-terraform-vault",
-		"SOURCE_URL=https://github.com/jenkins-x/jx3-versions",
+		"REPO_URL=https://github.com/jenkins-x/jx3-versions",
 	}
 
 	_, do := deletecmd.NewCmdDelete()
