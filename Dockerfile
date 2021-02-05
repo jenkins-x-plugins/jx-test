@@ -1,4 +1,4 @@
-FROM gcr.io/jenkinsxio-labs-private/jxl-base:0.0.52
+FROM ghcr.io/jenkins-x/jx-boot:latest
 
 ENTRYPOINT ["jx-test"]
 
