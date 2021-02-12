@@ -3,6 +3,8 @@ package create
 import (
 	"context"
 	"fmt"
+	"github.com/jenkins-x/jx-test/pkg/dynkube"
+	"github.com/jenkins-x/jx-test/pkg/terraforms"
 
 	"github.com/Masterminds/sprig/v3"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/cmdrunner"
@@ -130,6 +132,9 @@ func (o *Options) Run() error {
 	if labels == nil {
 		labels = map[string]string{}
 	}
+	if o.Labels["kind"] == "" {
+		o.Labels["kind"] = terraforms.LabelValueKindTest
+	}
 	for k, v := range o.Labels {
 		labels[k] = v
 	}
@@ -158,19 +163,12 @@ func (o *Options) Run() error {
 	resourceName := strings.ToLower(kind) + "s"
 	gvr := schema.GroupVersionResource{Group: gv.Group, Version: gv.Version, Resource: resourceName}
 
-	var client dynamic.ResourceInterface
-	if ns != "" {
-		client = o.DynamicClient.Resource(gvr).Namespace(ns)
-	} else {
-		client = o.DynamicClient.Resource(gvr)
-	}
-	o.Client = client
-
+	o.Client = dynkube.DynamicResource(o.DynamicClient, ns, gvr)
 	ctx := o.GetContext()
-	selector := ToSelector(o.Labels)
+	selector := dynkube.ToSelector(o.Labels)
 
 	// lets delete all the previous resources for this Pull Request and Context
-	list, err := client.List(ctx, metav1.ListOptions{
+	list, err := dynkube.DynamicResource(o.DynamicClient, ns, gvr).List(ctx, metav1.ListOptions{
 		LabelSelector: selector,
 	})
 	if err != nil && apierrors.IsNotFound(err) {
@@ -179,7 +177,7 @@ func (o *Options) Run() error {
 	for _, r := range list.Items {
 		name := r.GetName()
 
-		err = client.Delete(ctx, name, metav1.DeleteOptions{})
+		err = dynkube.DynamicResource(o.DynamicClient, ns, gvr).Delete(ctx, name, metav1.DeleteOptions{})
 		if err != nil {
 			return errors.Wrapf(err, "failed to delete %s", name)
 		}
@@ -192,7 +190,7 @@ func (o *Options) Run() error {
 		return errors.Errorf("no name defaulted")
 	}
 
-	_, err = client.Get(ctx, name, metav1.GetOptions{})
+	_, err = dynkube.DynamicResource(o.DynamicClient, ns, gvr).Get(ctx, name, metav1.GetOptions{})
 	if err == nil {
 		return errors.Errorf("should not have a %s called %s", kind, name)
 	}
@@ -200,7 +198,7 @@ func (o *Options) Run() error {
 		return errors.Wrapf(err, "failed to check if %s %s exists", kind, name)
 	}
 
-	u, err = client.Create(ctx, u, metav1.CreateOptions{})
+	u, err = dynkube.DynamicResource(o.DynamicClient, ns, gvr).Create(ctx, u, metav1.CreateOptions{})
 	if err != nil {
 		return errors.Wrapf(err, "failed to create %s %s", kind, name)
 	}
@@ -218,7 +216,7 @@ func (o *Options) Run() error {
 		return nil
 	}
 
-	err = client.Delete(ctx, name, metav1.DeleteOptions{})
+	err = dynkube.DynamicResource(o.DynamicClient, ns, gvr).Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
 		return errors.Wrapf(err, "failed to delete %s %s", kind, name)
 	}
@@ -293,21 +291,4 @@ func (o *Options) watchJob() error {
 		return errors.Wrapf(err, "failed to run %s", c.CLI())
 	}
 	return nil
-}
-
-// ToSelector converts the given labels into a selector string
-func ToSelector(labels map[string]string) string {
-	if labels == nil {
-		return ""
-	}
-	buf := &strings.Builder{}
-	for k, v := range labels {
-		if buf.Len() > 0 {
-			buf.WriteString(",")
-		}
-		buf.WriteString(k)
-		buf.WriteString("=")
-		buf.WriteString(v)
-	}
-	return buf.String()
 }

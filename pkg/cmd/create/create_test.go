@@ -2,19 +2,16 @@ package create_test
 
 import (
 	"github.com/jenkins-x/jx-helpers/v3/pkg/cmdrunner/fakerunner"
+	"github.com/jenkins-x/jx-test/pkg/terraforms/tftests"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"path/filepath"
-	"sigs.k8s.io/yaml"
 	"strconv"
 	"testing"
 
 	"github.com/jenkins-x/jx-test/pkg/cmd/create"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	dynfake "k8s.io/client-go/dynamic/fake"
 )
 
 var (
@@ -23,6 +20,7 @@ var (
 kind: Terraform
 metadata:
   labels:
+    kind: jx-test
     context: myctx
     owner: myowner
     pr: pr-456
@@ -34,6 +32,7 @@ metadata:
 kind: Terraform
 metadata:
   labels:
+    kind: jx-test
     context: myctx
     owner: myowner
     pr: pr-456
@@ -45,6 +44,7 @@ metadata:
 kind: Terraform
 metadata:
   labels:
+    kind: jx-test
     context: myctx
     owner: myowner
     pr: pr-999
@@ -67,8 +67,8 @@ func TestCreate(t *testing.T) {
 	expectedName := "tf-myrepo-pr456-myctx-3"
 
 	scheme := runtime.NewScheme()
-	dynObjects := ParseUnstructureds(t, testResources)
-	fakeDynClient := NewFakeDynClient(scheme, dynObjects...)
+	dynObjects := tftests.ParseUnstructureds(t, nil, testResources)
+	fakeDynClient := tftests.NewFakeDynClient(scheme, dynObjects...)
 
 	runner := &fakerunner.FakeRunner{}
 
@@ -90,14 +90,14 @@ func TestCreate(t *testing.T) {
 	require.NoError(t, err, "failed to run create command")
 
 	assert.Equal(t, expectedName, o.ResourceName, "o.ResourceName")
-	assert.Equal(t, map[string]string{"context": contextName, "owner": owner, "pr": prLabel, "repo": repo}, o.Labels, "o.Labels")
+	assert.Equal(t, map[string]string{"context": contextName, "kind": "jx-test", "owner": owner, "pr": prLabel, "repo": repo}, o.Labels, "o.Labels")
 
 	ctx := o.GetContext()
 
 	list, err := o.Client.List(ctx, metav1.ListOptions{})
 	require.NoError(t, err, "failed to list resources")
 	require.NotNil(t, list, "no list resource returned")
-	require.Len(t, list.Items, 1, "should have two resources after removing the previous PRs resources")
+	require.Len(t, list.Items, 1, "should have removed previous PR resources")
 
 	r := list.Items[0]
 	require.Equal(t, "tf-myrepo-pr999-myctx-3", r.GetName(), "resource[0].Name")
@@ -106,24 +106,4 @@ func TestCreate(t *testing.T) {
 	for _, c := range runner.OrderedCommands {
 		t.Logf("faked: %s\n", c.CLI())
 	}
-}
-
-// ParseUnstructureds parses the resources
-func ParseUnstructureds(t *testing.T, resources []string) []runtime.Object {
-	var answer []runtime.Object
-	for _, r := range resources {
-		u := &unstructured.Unstructured{}
-		err := yaml.Unmarshal([]byte(r), u)
-		require.NoError(t, err, "failed to unmarshal resource %s", r)
-		answer = append(answer, u)
-	}
-	return answer
-}
-
-// NewFakeDynClient creates a new dynamic client with the external secrets
-func NewFakeDynClient(scheme *runtime.Scheme, dynObjects ...runtime.Object) *dynfake.FakeDynamicClient {
-	gvrToListKind := map[schema.GroupVersionResource]string{
-		{Group: "tf.isaaguilar.com", Version: "v1alpha1", Resource: "terraforms"}: "TerraformList",
-	}
-	return dynfake.NewSimpleDynamicClientWithCustomListKinds(scheme, gvrToListKind, dynObjects...)
 }
