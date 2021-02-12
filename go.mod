@@ -5,6 +5,7 @@ require (
 	github.com/alecthomas/colour v0.1.0 // indirect
 	github.com/alecthomas/repr v0.0.0-20200325044227-4184120f674c // indirect
 	github.com/cpuguy83/go-md2man v1.0.10
+	github.com/Masterminds/sprig/v3 v3.2.0
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/jenkins-x/jx-helpers/v3 v3.0.79
 	github.com/jenkins-x/jx-kube-client/v3 v3.0.2

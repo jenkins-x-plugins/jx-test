@@ -3,6 +3,8 @@ package create
 import (
 	"context"
 	"fmt"
+
+	"github.com/Masterminds/sprig/v3"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/cmdrunner"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/cobras/helper"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/cobras/templates"
@@ -47,6 +49,8 @@ type Options struct {
 	Name          string
 	Namespace     string
 	NoWatchJob    bool
+	Env           map[string]string
+	EnvVars       []string
 	DynamicClient dynamic.Interface
 	Ctx           context.Context
 	Client        dynamic.ResourceInterface
@@ -78,6 +82,7 @@ func NewCmdCreate() (*cobra.Command, *Options) {
 
 	o.Options.AddFlags(cmd)
 	cmd.Flags().StringVarP(&o.File, "file", "f", "", "the template file to create")
+	cmd.Flags().StringArrayVarP(&o.EnvVars, "env", "e", nil, "specifies env vars of the form name=value")
 	cmd.Flags().BoolVarP(&o.NoWatchJob, "no-watch-job", "", false, "disables watching of the job created by the resource")
 	return cmd, o
 }
@@ -98,7 +103,9 @@ func (o *Options) Run() error {
 	}
 
 	o.Name = o.ResourceName
-	output, err := templater.Evaluate(nil, o, string(templateText), o.File, "resource template")
+	funcMap := sprig.TxtFuncMap()
+
+	output, err := templater.Evaluate(funcMap, o, string(templateText), o.File, "resource template")
 	if err != nil {
 		return errors.Wrapf(err, "failed to evaluate template %s", o.File)
 	}
@@ -221,6 +228,16 @@ func (o *Options) Validate() error {
 		return errors.Errorf("no labels could be created")
 	}
 
+	if o.Env == nil {
+		o.Env = map[string]string{}
+	}
+	for _, e := range o.EnvVars {
+		values := strings.SplitN(e, "=", 2)
+		if len(values) < 2 {
+			return options.InvalidOptionf("env", e, "environment variables should be of the form name=value")
+		}
+		o.Env[values[0]] = values[1]
+	}
 	o.DynamicClient, err = kube.LazyCreateDynamicClient(o.DynamicClient)
 	if o.Namespace == "" {
 		o.Namespace, err = kubeclient.CurrentNamespace()

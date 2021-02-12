@@ -7,7 +7,7 @@ spec:
   - name: TF_VAR_cluster_name
     value: pr-2127-1-gke-gsm
   - name: TF_VAR_jx_git_url
-    value: https://github.com/jenkins-x-bdd/cluster-pr-2127-1-gke-gsm-dev.git
+    value: https://github.com/jenkins-x-bdd/cluster-{{ .Env.TF_VAR_cluster_name }}-dev.git
   - name: TF_VAR_jx_bot_username
     value: jenkins-x-bot-bdd
   - name: TF_VAR_jx_bot_token
@@ -15,6 +15,10 @@ spec:
       secretKeyRef:
         name: bdd-git
         key: password
+{{- range $pkey, $pval := .Env }}
+  - name: {{ $pkey }}
+    value: {{ quote $pval }}
+{{- end }}
 
   scmAuthMethods:
   - host: github.com
@@ -27,7 +31,7 @@ spec:
           key: password
   terraformVersion: 0.13.4
   terraformModule:
-    address: https://github.com/jenkins-x-bdd/infra-pr-2127-1-gke-gsm-dev
+    address: https://github.com/jenkins-x-bdd/infra-{{ .Env.TF_VAR_cluster_name }}-dev
 
   customBackend: |-
     terraform {

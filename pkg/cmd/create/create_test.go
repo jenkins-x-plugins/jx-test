@@ -72,15 +72,7 @@ func TestCreate(t *testing.T) {
 
 	runner := &fakerunner.FakeRunner{}
 
-	/*
-		for _, r := range dynObjects {
-
-		}
-		*
-	*/
-
 	_, o := create.NewCmdCreate()
-
 	o.PullRequestNumber = prNumber
 	o.RepoOwner = owner
 	o.RepoName = repo
@@ -88,6 +80,7 @@ func TestCreate(t *testing.T) {
 	o.BuildNumber = buildNumber
 	o.Namespace = ns
 	o.ResourceNamePrefix = namePrefix
+	o.EnvVars = []string{"TF_VAR_gcp_project=jenkins-x-labs-bdd", "TF_VAR_cluster_name=pr-2127-5-gke-gsm"}
 	o.File = filepath.Join("test_data", "tf.yaml")
 	o.DynamicClient = fakeDynClient
 	o.CommandRunner = runner.Run
