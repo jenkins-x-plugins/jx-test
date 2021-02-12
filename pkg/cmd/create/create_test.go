@@ -2,6 +2,7 @@ package create_test
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"path/filepath"
@@ -13,6 +14,44 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	dynfake "k8s.io/client-go/dynamic/fake"
+)
+
+var (
+	testResources = []string{
+		`apiVersion: tf.isaaguilar.com/v1alpha1
+kind: Terraform
+metadata:
+  labels:
+    context: myctx
+    owner: myowner
+    pr: pr-456
+    repo: myrepo
+  name: tf-myrepo-pr456-myctx-1
+  namespace: jx
+`,
+		`apiVersion: tf.isaaguilar.com/v1alpha1
+kind: Terraform
+metadata:
+  labels:
+    context: myctx
+    owner: myowner
+    pr: pr-456
+    repo: myrepo
+  name: tf-myrepo-pr456-myctx-2
+  namespace: jx
+`,
+		`apiVersion: tf.isaaguilar.com/v1alpha1
+kind: Terraform
+metadata:
+  labels:
+    context: myctx
+    owner: myowner
+    pr: pr-999
+    repo: myrepo
+  name: tf-myrepo-pr999-myctx-3
+  namespace: jx
+`,
+	}
 )
 
 func TestCreate(t *testing.T) {
@@ -27,7 +66,15 @@ func TestCreate(t *testing.T) {
 	expectedName := "tf-myrepo-pr456-myctx-3"
 
 	scheme := runtime.NewScheme()
-	fakeDynClient := NewFakeDynClient(scheme)
+	dynObjects := ParseUnstructureds(t, testResources)
+	fakeDynClient := NewFakeDynClient(scheme, dynObjects...)
+
+	/*
+		for _, r := range dynObjects {
+
+		}
+		*
+	*/
 
 	_, o := create.NewCmdCreate()
 
@@ -52,14 +99,32 @@ func TestCreate(t *testing.T) {
 	list, err := o.Client.List(ctx, metav1.ListOptions{})
 	require.NoError(t, err, "failed to list resources")
 	require.NotNil(t, list, "no list resource returned")
-	require.Len(t, list.Items, 1, "should have one resource")
+	require.Len(t, list.Items, 2, "should have two resources after removing the previous PRs resources")
+
 	r := list.Items[0]
-	require.Equal(t, expectedName, r.GetName(), "resource.Name")
-	require.Equal(t, ns, r.GetNamespace(), "resource.Namespace")
+	require.Equal(t, expectedName, r.GetName(), "resource[0].Name")
+	require.Equal(t, ns, r.GetNamespace(), "resource[0].Namespace")
 
 	data, err := yaml.Marshal(r)
 	require.NoError(t, err, "failed to marshal resource %v", r)
 	t.Logf("got resource %s\n", string(data))
+
+	r = list.Items[1]
+	require.Equal(t, "tf-myrepo-pr999-myctx-3", r.GetName(), "resource[1].Name")
+	require.Equal(t, ns, r.GetNamespace(), "resource[1].Namespace")
+
+}
+
+// ParseUnstructureds parses the resources
+func ParseUnstructureds(t *testing.T, resources []string) []runtime.Object {
+	var answer []runtime.Object
+	for _, r := range resources {
+		u := &unstructured.Unstructured{}
+		err := yaml.Unmarshal([]byte(r), u)
+		require.NoError(t, err, "failed to unmarshal resource %s", r)
+		answer = append(answer, u)
+	}
+	return answer
 }
 
 // NewFakeDynClient creates a new dynamic client with the external secrets
