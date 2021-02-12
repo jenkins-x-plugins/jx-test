@@ -174,14 +174,16 @@ func (o *Options) Run() error {
 	if err != nil && apierrors.IsNotFound(err) {
 		return errors.Wrapf(err, "could not find resources for ")
 	}
-	for _, r := range list.Items {
-		name := r.GetName()
+	if list != nil {
+		for _, r := range list.Items {
+			name := r.GetName()
 
-		err = dynkube.DynamicResource(o.DynamicClient, ns, gvr).Delete(ctx, name, metav1.DeleteOptions{})
-		if err != nil {
-			return errors.Wrapf(err, "failed to delete %s", name)
+			err = dynkube.DynamicResource(o.DynamicClient, ns, gvr).Delete(ctx, name, metav1.DeleteOptions{})
+			if err != nil {
+				return errors.Wrapf(err, "failed to delete %s", name)
+			}
+			log.Logger().Infof("deleted previous pipeline %s %s", kind, info(name))
 		}
-		log.Logger().Infof("deleted previous pipeline %s %s", kind, info(name))
 	}
 
 	// now lets create the new resource
