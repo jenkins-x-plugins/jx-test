@@ -3,17 +3,26 @@ package create
 import (
 	"context"
 	"fmt"
-	"github.com/jenkins-x/jx-helpers/v3/pkg/cmdrunner"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/cobras/helper"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/cobras/templates"
+	"github.com/jenkins-x/jx-helpers/v3/pkg/files"
+	"github.com/jenkins-x/jx-helpers/v3/pkg/kube"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/options"
+	"github.com/jenkins-x/jx-helpers/v3/pkg/pipelinectx"
+	"github.com/jenkins-x/jx-helpers/v3/pkg/templater"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/termcolor"
+	"github.com/jenkins-x/jx-kube-client/v3/pkg/kubeclient"
 	"github.com/jenkins-x/jx-logging/v3/pkg/log"
-	"github.com/jenkins-x/jx-test/pkg/apis/jxtest/v1alpha1"
-	"github.com/jenkins-x/jx-test/pkg/pipelinectx"
 	"github.com/jenkins-x/jx-test/pkg/root"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"io/ioutil"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	"sigs.k8s.io/yaml"
 	"strings"
 )
 
@@ -33,8 +42,11 @@ var (
 type Options struct {
 	pipelinectx.Options
 	File          string
-	Kind          string
-	CommandRunner cmdrunner.CommandRunner
+	Name          string
+	Namespace     string
+	DynamicClient dynamic.Interface
+	Ctx           context.Context
+	Client        dynamic.ResourceInterface
 }
 
 // NewCmdCreate creates a command object for the command
@@ -52,18 +64,17 @@ func NewCmdCreate() (*cobra.Command, *Options) {
 		},
 	}
 
-	ctx := cmd.Context()
-	if ctx == nil {
-		ctx = context.TODO()
+	if o.Ctx == nil {
+		o.Ctx = cmd.Context()
 	}
-	err := o.EnvironmentDefaults(ctx)
+	err := o.EnvironmentDefaults(o.GetContext())
 	if err != nil {
 		log.Logger().Warnf("failed to default env vars: %s", err.Error())
 	}
 
 	o.Options.AddFlags(cmd)
 	cmd.Flags().StringVarP(&o.File, "file", "f", "", "the template file to create")
-	cmd.Flags().StringVarP(&o.Kind, "kind", "", "terraform", "the kubernetes kind of the resource ot create/delete")
+	//cmd.Flags().StringVarP(&o.Kind, "kind", "", "terraform", "the kubernetes kind of the resource ot create/delete")
 	return cmd, o
 }
 
@@ -77,13 +88,115 @@ func (o *Options) Run() error {
 	log.Logger().Infof("resource: %s", info(o.ResourceName))
 	log.Logger().Infof("labels: %v", o.Labels)
 
-	// lets delete any old resources
+	templateText, err := ioutil.ReadFile(o.File)
+	if err != nil {
+		return errors.Wrapf(err, "failed to read %s", o.File)
+	}
 
-	if len(o.Labels) == 0 {
-		return errors.Errorf("no labels could be created")
+	o.Name = o.ResourceName
+	output, err := templater.Evaluate(nil, o, string(templateText), o.File, "resource template")
+	if err != nil {
+		return errors.Wrapf(err, "failed to evaluate template %s", o.File)
+	}
+
+	log.Logger().Debugf("generated template: %s", output)
+
+	u := &unstructured.Unstructured{}
+	err = yaml.Unmarshal([]byte(output), u)
+	if err != nil {
+		return errors.Wrapf(err, "failed to unmarshal the template of file %s has YAML: %s", o.File, output)
+	}
+
+	// modify labels
+	labels := u.GetLabels()
+	if labels == nil {
+		labels = map[string]string{}
+	}
+	for k, v := range o.Labels {
+		labels[k] = v
+	}
+	u.SetLabels(labels)
+
+	// modify name
+	u.SetName(o.ResourceName)
+	ns := o.Namespace
+	if ns != "" {
+		u.SetNamespace(ns)
+	}
+
+	kind := u.GetKind()
+	apiVersion := u.GetAPIVersion()
+	if kind == "" {
+		return errors.Errorf("generated template of file %s has missing kind", o.File)
+	}
+	if apiVersion == "" {
+		return errors.Errorf("generated template of file %s has missing apiVersion", o.File)
+	}
+
+	gv, err := schema.ParseGroupVersion(apiVersion)
+	if err != nil {
+		return errors.Wrapf(err, "failed to parse apiVersion: %s", apiVersion)
+	}
+	resourceName := strings.ToLower(kind) + "s"
+	gvr := schema.GroupVersionResource{Group: gv.Group, Version: gv.Version, Resource: resourceName}
+
+	var client dynamic.ResourceInterface
+	if ns != "" {
+		client = o.DynamicClient.Resource(gvr).Namespace(ns)
+	} else {
+		client = o.DynamicClient.Resource(gvr)
+	}
+	o.Client = client
+
+	ctx := o.GetContext()
+	selector := ToSelector(o.Labels)
+
+	// lets delete all the previous resources for this Pull Request and Context
+	list, err := client.List(ctx, metav1.ListOptions{
+		LabelSelector: selector,
+	})
+	if err != nil && apierrors.IsNotFound(err) {
+		return errors.Wrapf(err, "could not find resources for ")
+	}
+	for _, r := range list.Items {
+		name := r.GetName()
+
+		err = client.Delete(ctx, name, metav1.DeleteOptions{})
+		if err != nil {
+			return errors.Wrapf(err, "failed to delete %s", name)
+		}
+		log.Logger().Infof("deleted %s %s", kind, info(name))
+	}
+
+	// now lets create the new resource
+	name := o.Name
+	if name == "" {
+		return errors.Errorf("no name defaulted")
+	}
+
+	_, err = client.Get(ctx, name, metav1.GetOptions{})
+	if err == nil {
+		return errors.Errorf("should not have a %s called %s", kind, name)
+	}
+	if err != nil && !apierrors.IsNotFound(err) {
+		return errors.Wrapf(err, "failed to check if %s %s exists", kind, name)
+	}
+
+	u, err = client.Create(ctx, u, metav1.CreateOptions{})
+	if err != nil {
+		return errors.Wrapf(err, "failed to create %s %s", kind, name)
+	}
+	log.Logger().Infof("created %s %s", kind, info(name))
+	return nil
+}
+
+// ToSelector converts the given labels into a selector string
+func ToSelector(labels map[string]string) string {
+	if labels == nil {
+		return ""
 	}
 	buf := &strings.Builder{}
-	for k, v := range o.Labels {
+	for k, v := range labels {
 		if buf.Len() > 0 {
 			buf.WriteString(",")
 		}
@@ -91,21 +204,10 @@ func (o *Options) Run() error {
 		buf.WriteString("=")
 		buf.WriteString(v)
 	}
-
-	selector := buf.String()
-
-	c := &cmdrunner.Command{
-		Name: "kubectl",
-		Args: []string{"delete", o.Kind, "-l", selector},
-	}
-	_, err = o.CommandRunner(c)
-	if err != nil {
-		return errors.Wrapf(err, "failed to run %s", c.CLI())
-	}
-	log.Logger().Infof("removed %s resources with selector %s", info(o.Kind), info(selector))
-	return nil
+	return buf.String()
 }
 
+// Validate validates options
 func (o *Options) Validate() error {
 	err := o.Options.Validate()
 	if err != nil {
@@ -115,31 +217,33 @@ func (o *Options) Validate() error {
 	if o.File == "" {
 		return options.MissingOption("file")
 	}
+	exists, err := files.FileExists(o.File)
+	if err != nil {
+		return errors.Wrapf(err, "failed to check if file exists %s", o.File)
+	}
+	if !exists {
+		return errors.Errorf("file %s does not exist", o.File)
+	}
 
-	if o.CommandRunner == nil {
-		o.CommandRunner = cmdrunner.DefaultCommandRunner
+	// lets delete any old resources
+	if len(o.Labels) == 0 {
+		return errors.Errorf("no labels could be created")
+	}
+
+	o.DynamicClient, err = kube.LazyCreateDynamicClient(o.DynamicClient)
+	if o.Namespace == "" {
+		o.Namespace, err = kubeclient.CurrentNamespace()
+		if err != nil {
+			return errors.Wrap(err, "failed to get current kubernetes namespace")
+		}
 	}
 	return nil
 }
 
-// ShouldDeleteDueToNewerRun returns true if a testRun with a higher build number exists
-func (o *Options) MarkOldRunsAsDelete(currentTestRun *v1alpha1.TestRun, testRuns []v1alpha1.TestRun) error {
-	/*
-		testKind := currentTestRun.Spec.TestKind()
-
-		for i := 0; i < len(testRuns); i++ {
-			testRun := &testRuns[i]
-
-			// check for same branch, context and trigger source  URL
-			existingTestKind := testRun.Spec.TestKind()
-			if existingTestKind == testKind {
-				err := testclients.MarkDeleted(o.TestClient, o.Namespace, testRun)
-				if err != nil {
-					return errors.Wrapf(err, "failed to delete currentTestRun %s", testRun.Name)
-				}
-			}
-		}
-
-	*/
-	return nil
+// GetContext lazily creates a context if it doesn't exist already
+func (o *Options) GetContext() context.Context {
+	if o.Ctx == nil {
+		o.Ctx = context.TODO()
+	}
+	return o.Ctx
 }

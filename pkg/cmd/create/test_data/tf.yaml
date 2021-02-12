@@ -1,0 +1,46 @@
+apiVersion: tf.isaaguilar.com/v1alpha1
+kind: Terraform
+spec:
+  env:
+  - name: TF_VAR_gcp_project
+    value: jenkins-x-labs-bdd
+  - name: TF_VAR_cluster_name
+    value: pr-2127-1-gke-gsm
+  - name: TF_VAR_jx_git_url
+    value: https://github.com/jenkins-x-bdd/cluster-pr-2127-1-gke-gsm-dev.git
+  - name: TF_VAR_jx_bot_username
+    value: jenkins-x-bot-bdd
+  - name: TF_VAR_jx_bot_token
+    valueFrom:
+      secretKeyRef:
+        name: bdd-git
+        key: password
+
+  scmAuthMethods:
+  - host: github.com
+    git:
+      https:
+        requireProxy: false
+        tokenSecretRef:
+          name: bdd-git
+          namespace: jx
+          key: password
+  terraformVersion: 0.13.4
+  terraformModule:
+    address: https://github.com/jenkins-x-bdd/infra-pr-2127-1-gke-gsm-dev
+
+  customBackend: |-
+    terraform {
+      backend "kubernetes" {
+        secret_suffix = "{{ .Name }}-state"
+        namespace = "{{ .Namespace }}"
+        in_cluster_config = true
+      }
+    }
+
+  serviceAccount: tekton-bot
+
+  applyOnCreate: true
+  applyOnUpdate: true
+  applyOnDelete: true
+  ignoreDelete: false
