@@ -45,16 +45,18 @@ var (
 // Options the options for the command
 type Options struct {
 	pipelinectx.Options
-	File          string
-	Name          string
-	Namespace     string
-	NoWatchJob    bool
-	Env           map[string]string
-	EnvVars       []string
-	DynamicClient dynamic.Interface
-	Ctx           context.Context
-	Client        dynamic.ResourceInterface
-	CommandRunner cmdrunner.CommandRunner
+	File             string
+	Name             string
+	Namespace        string
+	NoWatchJob       bool
+	NoDeleteResource bool
+	LogResource      bool
+	Env              map[string]string
+	EnvVars          []string
+	DynamicClient    dynamic.Interface
+	Ctx              context.Context
+	Client           dynamic.ResourceInterface
+	CommandRunner    cmdrunner.CommandRunner
 }
 
 // NewCmdCreate creates a command object for the command
@@ -81,9 +83,12 @@ func NewCmdCreate() (*cobra.Command, *Options) {
 	}
 
 	o.Options.AddFlags(cmd)
+
 	cmd.Flags().StringVarP(&o.File, "file", "f", "", "the template file to create")
 	cmd.Flags().StringArrayVarP(&o.EnvVars, "env", "e", nil, "specifies env vars of the form name=value")
 	cmd.Flags().BoolVarP(&o.NoWatchJob, "no-watch-job", "", false, "disables watching of the job created by the resource")
+	cmd.Flags().BoolVarP(&o.NoDeleteResource, "no-delete", "", false, "disables deleting of the test resource after the job has completed successfully")
+	cmd.Flags().BoolVarP(&o.LogResource, "log", "", false, "logs the generated resource before applying it")
 	return cmd, o
 }
 
@@ -110,7 +115,9 @@ func (o *Options) Run() error {
 		return errors.Wrapf(err, "failed to evaluate template %s", o.File)
 	}
 
-	log.Logger().Debugf("generated template: %s", output)
+	if o.LogResource {
+		log.Logger().Infof("generated template: %s", output)
+	}
 
 	u := &unstructured.Unstructured{}
 	err = yaml.Unmarshal([]byte(output), u)
@@ -176,7 +183,7 @@ func (o *Options) Run() error {
 		if err != nil {
 			return errors.Wrapf(err, "failed to delete %s", name)
 		}
-		log.Logger().Infof("deleted %s %s", kind, info(name))
+		log.Logger().Infof("deleted previous pipeline %s %s", kind, info(name))
 	}
 
 	// now lets create the new resource
@@ -202,7 +209,21 @@ func (o *Options) Run() error {
 	if o.NoWatchJob {
 		return nil
 	}
-	return o.watchJob()
+	err = o.watchJob()
+	if err != nil {
+		return errors.Wrapf(err, "job failed to complete succesfully")
+	}
+
+	if o.NoDeleteResource {
+		return nil
+	}
+
+	err = client.Delete(ctx, name, metav1.DeleteOptions{})
+	if err != nil {
+		return errors.Wrapf(err, "failed to delete %s %s", kind, name)
+	}
+	log.Logger().Infof("Job succeeded so deleted %s %s", kind, info(name))
+	return nil
 }
 
 // Validate validates options
@@ -262,7 +283,7 @@ func (o *Options) GetContext() context.Context {
 func (o *Options) watchJob() error {
 	c := &cmdrunner.Command{
 		Name: "jx",
-		Args: []string{"verify", "pod", o.Name, "--namespace", o.Namespace},
+		Args: []string{"verify", "job", "--name", o.Name, "--namespace", o.Namespace},
 		Out:  os.Stdout,
 		Err:  os.Stderr,
 		In:   os.Stdin,

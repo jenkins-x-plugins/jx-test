@@ -80,6 +80,7 @@ func TestCreate(t *testing.T) {
 	o.BuildNumber = buildNumber
 	o.Namespace = ns
 	o.ResourceNamePrefix = namePrefix
+	o.LogResource = true
 	o.EnvVars = []string{"TF_VAR_gcp_project=jenkins-x-labs-bdd", "TF_VAR_cluster_name=pr-2127-5-gke-gsm"}
 	o.File = filepath.Join("test_data", "tf.yaml")
 	o.DynamicClient = fakeDynClient
@@ -96,19 +97,11 @@ func TestCreate(t *testing.T) {
 	list, err := o.Client.List(ctx, metav1.ListOptions{})
 	require.NoError(t, err, "failed to list resources")
 	require.NotNil(t, list, "no list resource returned")
-	require.Len(t, list.Items, 2, "should have two resources after removing the previous PRs resources")
+	require.Len(t, list.Items, 1, "should have two resources after removing the previous PRs resources")
 
 	r := list.Items[0]
-	require.Equal(t, expectedName, r.GetName(), "resource[0].Name")
+	require.Equal(t, "tf-myrepo-pr999-myctx-3", r.GetName(), "resource[0].Name")
 	require.Equal(t, ns, r.GetNamespace(), "resource[0].Namespace")
-
-	data, err := yaml.Marshal(r)
-	require.NoError(t, err, "failed to marshal resource %v", r)
-	t.Logf("got resource %s\n", string(data))
-
-	r = list.Items[1]
-	require.Equal(t, "tf-myrepo-pr999-myctx-3", r.GetName(), "resource[1].Name")
-	require.Equal(t, ns, r.GetNamespace(), "resource[1].Namespace")
 
 	for _, c := range runner.OrderedCommands {
 		t.Logf("faked: %s\n", c.CLI())
