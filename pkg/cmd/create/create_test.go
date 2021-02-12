@@ -1,6 +1,7 @@
 package create_test
 
 import (
+	"github.com/jenkins-x/jx-helpers/v3/pkg/cmdrunner/fakerunner"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -69,6 +70,8 @@ func TestCreate(t *testing.T) {
 	dynObjects := ParseUnstructureds(t, testResources)
 	fakeDynClient := NewFakeDynClient(scheme, dynObjects...)
 
+	runner := &fakerunner.FakeRunner{}
+
 	/*
 		for _, r := range dynObjects {
 
@@ -87,6 +90,7 @@ func TestCreate(t *testing.T) {
 	o.ResourceNamePrefix = namePrefix
 	o.File = filepath.Join("test_data", "tf.yaml")
 	o.DynamicClient = fakeDynClient
+	o.CommandRunner = runner.Run
 
 	err := o.Run()
 	require.NoError(t, err, "failed to run create command")
@@ -113,6 +117,9 @@ func TestCreate(t *testing.T) {
 	require.Equal(t, "tf-myrepo-pr999-myctx-3", r.GetName(), "resource[1].Name")
 	require.Equal(t, ns, r.GetNamespace(), "resource[1].Namespace")
 
+	for _, c := range runner.OrderedCommands {
+		t.Logf("faked: %s\n", c.CLI())
+	}
 }
 
 // ParseUnstructureds parses the resources

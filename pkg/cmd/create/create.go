@@ -3,6 +3,7 @@ package create
 import (
 	"context"
 	"fmt"
+	"github.com/jenkins-x/jx-helpers/v3/pkg/cmdrunner"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/cobras/helper"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/cobras/templates"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/files"
@@ -22,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"os"
 	"sigs.k8s.io/yaml"
 	"strings"
 )
@@ -44,9 +46,11 @@ type Options struct {
 	File          string
 	Name          string
 	Namespace     string
+	NoWatchJob    bool
 	DynamicClient dynamic.Interface
 	Ctx           context.Context
 	Client        dynamic.ResourceInterface
+	CommandRunner cmdrunner.CommandRunner
 }
 
 // NewCmdCreate creates a command object for the command
@@ -74,7 +78,7 @@ func NewCmdCreate() (*cobra.Command, *Options) {
 
 	o.Options.AddFlags(cmd)
 	cmd.Flags().StringVarP(&o.File, "file", "f", "", "the template file to create")
-	//cmd.Flags().StringVarP(&o.Kind, "kind", "", "terraform", "the kubernetes kind of the resource ot create/delete")
+	cmd.Flags().BoolVarP(&o.NoWatchJob, "no-watch-job", "", false, "disables watching of the job created by the resource")
 	return cmd, o
 }
 
@@ -187,24 +191,11 @@ func (o *Options) Run() error {
 		return errors.Wrapf(err, "failed to create %s %s", kind, name)
 	}
 	log.Logger().Infof("created %s %s", kind, info(name))
-	return nil
-}
 
-// ToSelector converts the given labels into a selector string
-func ToSelector(labels map[string]string) string {
-	if labels == nil {
-		return ""
+	if o.NoWatchJob {
+		return nil
 	}
-	buf := &strings.Builder{}
-	for k, v := range labels {
-		if buf.Len() > 0 {
-			buf.WriteString(",")
-		}
-		buf.WriteString(k)
-		buf.WriteString("=")
-		buf.WriteString(v)
-	}
-	return buf.String()
+	return o.watchJob()
 }
 
 // Validate validates options
@@ -237,6 +228,9 @@ func (o *Options) Validate() error {
 			return errors.Wrap(err, "failed to get current kubernetes namespace")
 		}
 	}
+	if o.CommandRunner == nil {
+		o.CommandRunner = cmdrunner.DefaultCommandRunner
+	}
 	return nil
 }
 
@@ -246,4 +240,36 @@ func (o *Options) GetContext() context.Context {
 		o.Ctx = context.TODO()
 	}
 	return o.Ctx
+}
+
+func (o *Options) watchJob() error {
+	c := &cmdrunner.Command{
+		Name: "jx",
+		Args: []string{"verify", "pod", o.Name, "--namespace", o.Namespace},
+		Out:  os.Stdout,
+		Err:  os.Stderr,
+		In:   os.Stdin,
+	}
+	_, err := o.CommandRunner(c)
+	if err != nil {
+		return errors.Wrapf(err, "failed to run %s", c.CLI())
+	}
+	return nil
+}
+
+// ToSelector converts the given labels into a selector string
+func ToSelector(labels map[string]string) string {
+	if labels == nil {
+		return ""
+	}
+	buf := &strings.Builder{}
+	for k, v := range labels {
+		if buf.Len() > 0 {
+			buf.WriteString(",")
+		}
+		buf.WriteString(k)
+		buf.WriteString("=")
+		buf.WriteString(v)
+	}
+	return buf.String()
 }
