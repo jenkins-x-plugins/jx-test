@@ -35,16 +35,19 @@ func (o *Options) Validate() error {
 	return nil
 }
 
-// Delete deletes the test run resources and the CRD
+// DoDelete deletes the test run resources and the CRD
 // can pass in the dir and bin script if they already exist locally
-func (o *Options) Delete(testRun *v1alpha1.TestRun, dir, bin string) error {
+func (o *Options) MarkDeleted(testRun *v1alpha1.TestRun, dir, bin string) error {
+	return testclients.MarkDeleted(o.TestClient, o.Namespace, testRun)
+}
+
+// DoDelete deletes the test run resources and the CRD
+// can pass in the dir and bin script if they already exist locally
+func (o *Options) DoDelete(testRun *v1alpha1.TestRun, dir, bin string) error {
 	name := testRun.Name
 	ns := o.Namespace
 	log.Logger().Infof("removing TestsRun resources for %s in namespace %s", termcolor.ColorInfo(name), termcolor.ColorInfo(ns))
 
-	if bin == "" {
-		bin = testRun.Spec.RemoveScript
-	}
 	if bin == "" {
 		bin = "bin/destroy.sh"
 		log.Logger().Warnf("the TestRun %s does not have a spec.removeScript so using default: %s", name, bin)

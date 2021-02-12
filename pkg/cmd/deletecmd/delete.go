@@ -76,15 +76,19 @@ func (o *Options) Run() error {
 			continue
 		}
 		if tr.Spec.Keep {
-			log.Logger().Infof("not removing TestRun %s in namespace %s as it is marked as KEEP", termcolor.ColorInfo(tr.Name), termcolor.ColorInfo(o.Namespace))
+			log.Logger().Infof("not marking TestRun %s in namespace %s as deleted as it is marked as KEEP", termcolor.ColorInfo(tr.Name), termcolor.ColorInfo(o.Namespace))
+			return nil
+		}
+		if tr.Spec.Delete {
+			log.Logger().Infof("the TestRun %s in namespace %s is already marked as DELETE", termcolor.ColorInfo(tr.Name), termcolor.ColorInfo(o.Namespace))
 			return nil
 		}
 
-		err = o.Options.Delete(&tr, o.Dir, o.RemoveScript)
+		err = o.Options.MarkDeleted(&tr, o.Dir, o.RemoveScript)
 		if err != nil {
-			return errors.Wrapf(err, "failed to remove TestRun %s in namespace %s", tr.Name, o.Namespace)
+			return errors.Wrapf(err, "failed to mark TestRun %s in namespace %s as deleted", tr.Name, o.Namespace)
 		}
-		log.Logger().Infof("removed TestRun %s in namespace %s", termcolor.ColorInfo(tr.Name), termcolor.ColorInfo(o.Namespace))
+		log.Logger().Infof("marked TestRun %s in namespace %s as deleted", termcolor.ColorInfo(tr.Name), termcolor.ColorInfo(o.Namespace))
 		return nil
 	}
 	return errors.Errorf("could not find a TestRun in namespace %s which has spec.testSource.url = %s", o.Namespace, o.TestGitURL)

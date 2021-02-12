@@ -12,6 +12,7 @@ require (
 	github.com/jenkins-x/jx-logging/v3 v3.0.3
 	github.com/onsi/gomega v1.8.1 // indirect
 	github.com/pkg/errors v0.9.1
+	github.com/sethvargo/go-envconfig v0.3.2
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.6.1

@@ -2,6 +2,7 @@ package gc
 
 import (
 	"fmt"
+	"github.com/jenkins-x/jx-test/pkg/testclients"
 	"time"
 
 	"github.com/jenkins-x/jx-helpers/v3/pkg/cobras/helper"
@@ -12,8 +13,6 @@ import (
 	"github.com/jenkins-x/jx-test/pkg/testclients/deleter"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var (
@@ -60,11 +59,10 @@ func (o *Options) Run() error {
 		return errors.Wrapf(err, "failed to validate setup")
 	}
 
-	testList, err := o.TestClient.JxtestV1alpha1().TestRuns(o.Namespace).List(metav1.ListOptions{})
-	if err != nil && !apierrors.IsNotFound(err) {
-		return errors.Wrapf(err, "failed to list TestRun instances in namespace %s", o.Namespace)
+	o.Tests, err = testclients.ListTestRuns(o.TestClient, o.Namespace)
+	if err != nil {
+		return errors.Wrapf(err, "failed to find TestRuns")
 	}
-	o.Tests = testList.Items
 	return o.GC()
 }
 
@@ -137,7 +135,7 @@ func (o *Options) ShouldDeleteDueToNewerRun(testRun *v1alpha1.TestRun, testRuns 
 
 // DeleteTestRun deletes the test run resources and the CRD
 func (o *Options) DeleteTestRun(testRun *v1alpha1.TestRun) {
-	err := o.Options.Delete(testRun, "", "")
+	err := o.Options.DoDelete(testRun, "", "")
 	if err != nil {
 		o.Errors = append(o.Errors, err)
 		return

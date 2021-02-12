@@ -34,7 +34,7 @@ type TestRunSpec struct {
 	TestSource Source `json:"testSource,omitempty"`
 
 	// RemoveScript is the script inside the test source git repository that is used to remove the test resources
-	RemoveScript string `json:"removeScript,omitempty"`
+	Kind string `json:"removeScript,omitempty"`
 
 	// TriggerSource the git repository which triggered the test
 	TriggerSource Source `json:"triggerSource,omitempty"`
