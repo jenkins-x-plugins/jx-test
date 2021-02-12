@@ -20,20 +20,72 @@ Garbage collects test resources
 
 .SH OPTIONS
 .PP
+\fB\-\-app\fP=""
+    the name of the app. Defaults to $APP\_NAME
+
+.PP
+\fB\-\-branch\fP=""
+    the branch used in the pipeline. Defaults to $BRANCH\_NAME
+
+.PP
+\fB\-\-build\fP=""
+    the build number. Defaults to $BUILD\_NUMBER
+
+.PP
+\fB\-\-context\fP=""
+    the pipeline context. Defaults to $JOB\_NAME
+
+.PP
+\fB\-e\fP, \fB\-\-env\fP=[]
+    specifies env vars of the form name=value
+
+.PP
+\fB\-f\fP, \fB\-\-file\fP=""
+    the template file to create
+
+.PP
 \fB\-h\fP, \fB\-\-help\fP[=false]
     help for create
 
 .PP
-\fB\-n\fP, \fB\-\-ns\fP=""
-    the namespace to filter the TestRun resources
+\fB\-\-log\fP[=false]
+    logs the generated resource before applying it
 
 .PP
-\fB\-s\fP, \fB\-\-remove\-script\fP="bin/destroy.sh"
-    the script in the test git url used to remove the resources
+\fB\-\-name\-prefix\fP=""
+    the resource name prefix
 
 .PP
-\fB\-u\fP, \fB\-\-test\-url\fP=""
-    the git URL of the test case which is used to remove the resources
+\fB\-\-no\-delete\fP[=false]
+    disables deleting of the test resource after the job has completed successfully
+
+.PP
+\fB\-\-no\-watch\-job\fP[=false]
+    disables watching of the job created by the resource
+
+.PP
+\fB\-\-owner\fP=""
+    the owner of the repository. Defaults to $REPO\_OWNER
+
+.PP
+\fB\-\-pr\fP=0
+    the Pull Request number. Defaults to $PULL\_NUMBER
+
+.PP
+\fB\-\-pull\-sha\fP=""
+    the Pull Request git SHA. Defaults to $PULL\_PULL\_SHA
+
+.PP
+\fB\-\-repo\fP=""
+    the name of the repository. Defaults to $REPO\_NAME
+
+.PP
+\fB\-\-type\fP=""
+    the pipeline type. e.g. presubmit or postsubmit. Defaults to $JOB\_TYPE
+
+.PP
+\fB\-\-version\fP="2.0.1300\-dev"
+    the version number. Defaults to $VERSION
 
 
 .SH EXAMPLE
