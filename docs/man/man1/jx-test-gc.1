@@ -21,7 +21,7 @@ Garbage collects test resources
 .SH OPTIONS
 .PP
 \fB\-d\fP, \fB\-\-duration\fP=2h0m0s
-    How long before the test is deleted if it does not have a delete flag
+    The maximum age of a Terraform resource before it is garbage collected
 
 .PP
 \fB\-h\fP, \fB\-\-help\fP[=false]
@@ -29,7 +29,11 @@ Garbage collects test resources
 
 .PP
 \fB\-n\fP, \fB\-\-ns\fP=""
-    the namespace to filter the TestRun resources
+    the namespace to query the Terraform resources
+
+.PP
+\fB\-l\fP, \fB\-\-selector\fP="kind=jx\-test"
+    the selector to find the Terraform resources to remove
 
 
 .SH EXAMPLE

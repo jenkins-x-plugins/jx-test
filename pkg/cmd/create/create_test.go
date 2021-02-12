@@ -1,46 +1,109 @@
 package create_test
 
 import (
+	"github.com/jenkins-x/jx-helpers/v3/pkg/cmdrunner/fakerunner"
+	"github.com/jenkins-x/jx-test/pkg/terraforms/tftests"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"path/filepath"
+	"strconv"
 	"testing"
 
-	"github.com/jenkins-x/jx-test/pkg/client/clientset/versioned/fake"
 	"github.com/jenkins-x/jx-test/pkg/cmd/create"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+var (
+	testResources = []string{
+		`apiVersion: tf.isaaguilar.com/v1alpha1
+kind: Terraform
+metadata:
+  labels:
+    kind: jx-test
+    context: myctx
+    owner: myowner
+    pr: pr-456
+    repo: myrepo
+  name: tf-myrepo-pr456-myctx-1
+  namespace: jx
+`,
+		`apiVersion: tf.isaaguilar.com/v1alpha1
+kind: Terraform
+metadata:
+  labels:
+    kind: jx-test
+    context: myctx
+    owner: myowner
+    pr: pr-456
+    repo: myrepo
+  name: tf-myrepo-pr456-myctx-2
+  namespace: jx
+`,
+		`apiVersion: tf.isaaguilar.com/v1alpha1
+kind: Terraform
+metadata:
+  labels:
+    kind: jx-test
+    context: myctx
+    owner: myowner
+    pr: pr-999
+    repo: myrepo
+  name: tf-myrepo-pr999-myctx-3
+  namespace: jx
+`,
+	}
 )
 
 func TestCreate(t *testing.T) {
-	_, o := create.NewCmdCreate()
-
 	ns := "jx"
-	o.TestGitURL = "https://github.com/myorg/env-pr-1243-5-bdd-thingy-dev.git"
+	namePrefix := "tf-"
+	owner := "myowner"
+	repo := "myrepo"
+	contextName := "myctx"
+	prNumber := 456
+	buildNumber := "3"
+	prLabel := "pr-" + strconv.Itoa(prNumber)
+	expectedName := "tf-myrepo-pr456-myctx-3"
+
+	scheme := runtime.NewScheme()
+	dynObjects := tftests.ParseUnstructureds(t, nil, testResources)
+	fakeDynClient := tftests.NewFakeDynClient(scheme, dynObjects...)
+
+	runner := &fakerunner.FakeRunner{}
+
+	_, o := create.NewCmdCreate()
+	o.PullRequestNumber = prNumber
+	o.RepoOwner = owner
+	o.RepoName = repo
+	o.Context = contextName
+	o.BuildNumber = buildNumber
 	o.Namespace = ns
-	o.TestClient = fake.NewSimpleClientset()
-	o.Env = []string{
-		"BRANCH_NAME=PR-1234",
-		"BUILD_NUMBER=3",
-		"PIPELINE_CONTEXT=gke-terraform-vault",
-		"REPO_URL=https://github.com/jenkins-x/jx3-versions",
-	}
+	o.ResourceNamePrefix = namePrefix
+	o.LogResource = true
+	o.EnvVars = []string{"TF_VAR_gcp_project=jenkins-x-labs-bdd", "TF_VAR_cluster_name=pr-2127-5-gke-gsm"}
+	o.File = filepath.Join("test_data", "tf.yaml")
+	o.DynamicClient = fakeDynClient
+	o.CommandRunner = runner.Run
 
 	err := o.Run()
 	require.NoError(t, err, "failed to run create command")
 
-	// lets query the test...
+	assert.Equal(t, expectedName, o.ResourceName, "o.ResourceName")
+	assert.Equal(t, map[string]string{"context": contextName, "kind": "jx-test", "owner": owner, "pr": prLabel, "repo": repo}, o.Labels, "o.Labels")
 
-	tests, err := o.TestClient.JxtestV1alpha1().TestRuns(ns).List(metav1.ListOptions{})
-	require.NoError(t, err, "failed to list Tests in namespace %s", ns)
-	require.Len(t, tests.Items, 1, "number of tests returned")
+	ctx := o.GetContext()
 
-	test := tests.Items[0]
+	list, err := o.Client.List(ctx, metav1.ListOptions{})
+	require.NoError(t, err, "failed to list resources")
+	require.NotNil(t, list, "no list resource returned")
+	require.Len(t, list.Items, 1, "should have removed previous PR resources")
 
-	t.Logf("found test %s\n", test.Name)
-	t.Logf("found test spec %#v\n", test.Spec)
+	r := list.Items[0]
+	require.Equal(t, "tf-myrepo-pr999-myctx-3", r.GetName(), "resource[0].Name")
+	require.Equal(t, ns, r.GetNamespace(), "resource[0].Namespace")
 
-	// lets verify things are populated right
-	assert.NotEmpty(t, test.Spec.Branch, "test.Spec.Branch")
-	assert.NotEmpty(t, test.Spec.Context, "test.Spec.Context")
-	assert.NotEmpty(t, test.Spec.BuildNumber, "test.Spec.BuildNumber")
-	assert.NotEmpty(t, test.Spec.TriggerSource.URL, "test.Spec.TriggerSource.URL")
+	for _, c := range runner.OrderedCommands {
+		t.Logf("faked: %s\n", c.CLI())
+	}
 }

@@ -1,24 +1,40 @@
 package create
 
 import (
+	"context"
 	"fmt"
-	"os"
-	"strings"
+	"github.com/jenkins-x/jx-test/pkg/dynkube"
+	"github.com/jenkins-x/jx-test/pkg/terraforms"
 
+	"github.com/Masterminds/sprig/v3"
+	"github.com/jenkins-x/jx-helpers/v3/pkg/cmdrunner"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/cobras/helper"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/cobras/templates"
-	"github.com/jenkins-x/jx-helpers/v3/pkg/gitclient/giturl"
-	"github.com/jenkins-x/jx-helpers/v3/pkg/kube/naming"
+	"github.com/jenkins-x/jx-helpers/v3/pkg/files"
+	"github.com/jenkins-x/jx-helpers/v3/pkg/kube"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/options"
-	"github.com/jenkins-x/jx-test/pkg/apis/jxtest/v1alpha1"
-	"github.com/jenkins-x/jx-test/pkg/client/clientset/versioned"
+	"github.com/jenkins-x/jx-helpers/v3/pkg/pipelinectx"
+	"github.com/jenkins-x/jx-helpers/v3/pkg/templater"
+	"github.com/jenkins-x/jx-helpers/v3/pkg/termcolor"
+	"github.com/jenkins-x/jx-kube-client/v3/pkg/kubeclient"
+	"github.com/jenkins-x/jx-logging/v3/pkg/log"
 	"github.com/jenkins-x/jx-test/pkg/root"
-	"github.com/jenkins-x/jx-test/pkg/testclients"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"io/ioutil"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	"os"
+	"sigs.k8s.io/yaml"
+	"strings"
 )
 
 var (
+	info = termcolor.ColorInfo
+
 	cmdLong = templates.LongDesc(`
 		Garbage collects test resources
 `)
@@ -30,12 +46,19 @@ var (
 
 // Options the options for the command
 type Options struct {
-	Namespace    string
-	TestGitURL   string
-	RemoveScript string
-	Env          []string
-	TestClient   versioned.Interface
-	TestRun      *v1alpha1.TestRun
+	pipelinectx.Options
+	File             string
+	Name             string
+	Namespace        string
+	NoWatchJob       bool
+	NoDeleteResource bool
+	LogResource      bool
+	Env              map[string]string
+	EnvVars          []string
+	DynamicClient    dynamic.Interface
+	Ctx              context.Context
+	Client           dynamic.ResourceInterface
+	CommandRunner    cmdrunner.CommandRunner
 }
 
 // NewCmdCreate creates a command object for the command
@@ -52,9 +75,22 @@ func NewCmdCreate() (*cobra.Command, *Options) {
 			helper.CheckErr(err)
 		},
 	}
-	cmd.Flags().StringVarP(&o.Namespace, "ns", "n", "", "the namespace to filter the TestRun resources")
-	cmd.Flags().StringVarP(&o.TestGitURL, "test-url", "u", "", "the git URL of the test case which is used to remove the resources")
-	cmd.Flags().StringVarP(&o.RemoveScript, "remove-script", "s", "bin/destroy.sh", "the script in the test git url used to remove the resources")
+
+	if o.Ctx == nil {
+		o.Ctx = cmd.Context()
+	}
+	err := o.EnvironmentDefaults(o.GetContext())
+	if err != nil {
+		log.Logger().Warnf("failed to default env vars: %s", err.Error())
+	}
+
+	o.Options.AddFlags(cmd)
+
+	cmd.Flags().StringVarP(&o.File, "file", "f", "", "the template file to create")
+	cmd.Flags().StringArrayVarP(&o.EnvVars, "env", "e", nil, "specifies env vars of the form name=value")
+	cmd.Flags().BoolVarP(&o.NoWatchJob, "no-watch-job", "", false, "disables watching of the job created by the resource")
+	cmd.Flags().BoolVarP(&o.NoDeleteResource, "no-delete", "", false, "disables deleting of the test resource after the job has completed successfully")
+	cmd.Flags().BoolVarP(&o.LogResource, "log", "", false, "logs the generated resource before applying it")
 	return cmd, o
 }
 
@@ -65,58 +101,194 @@ func (o *Options) Run() error {
 		return errors.Wrapf(err, "failed to validate")
 	}
 
-	test := &v1alpha1.TestRun{}
-	err = o.PopulateTest(test)
+	log.Logger().Infof("resource: %s", info(o.ResourceName))
+	log.Logger().Infof("labels: %v", o.Labels)
+
+	templateText, err := ioutil.ReadFile(o.File)
 	if err != nil {
-		return errors.Wrapf(err, "failed to populate the TestRun resource")
+		return errors.Wrapf(err, "failed to read %s", o.File)
 	}
 
-	o.TestRun, err = o.TestClient.JxtestV1alpha1().TestRuns(o.Namespace).Create(test)
-	if err != nil {
-		return errors.Wrapf(err, "failed to create the TestRun CRD")
-	}
-	return nil
-}
+	o.Name = o.ResourceName
+	funcMap := sprig.TxtFuncMap()
 
-func (o *Options) Validate() error {
-	if o.TestGitURL == "" {
-		return options.MissingOption("test-url")
-	}
-	if o.Env == nil {
-		o.Env = os.Environ()
-	}
-	var err error
-	o.TestClient, o.Namespace, err = testclients.LazyCreateClient(o.TestClient, o.Namespace)
+	output, err := templater.Evaluate(funcMap, o, string(templateText), o.File, "resource template")
 	if err != nil {
-		return errors.Wrapf(err, "failed to create test client")
+		return errors.Wrapf(err, "failed to evaluate template %s", o.File)
 	}
-	return nil
-}
 
-func (o *Options) PopulateTest(test *v1alpha1.TestRun) error {
-	test.Spec.TestSource.URL = o.TestGitURL
-	test.Spec.RemoveScript = o.RemoveScript
+	if o.LogResource {
+		log.Logger().Infof("generated template: %s", output)
+	}
 
-	if test.Spec.Env == nil {
-		test.Spec.Env = map[string]string{}
-	}
-	for _, e := range o.Env {
-		values := strings.SplitN(e, "=", 2)
-		if len(values) == 2 {
-			test.Spec.Env[values[0]] = values[1]
-		}
-	}
-	err := test.Spec.Validate()
+	u := &unstructured.Unstructured{}
+	err = yaml.Unmarshal([]byte(output), u)
 	if err != nil {
-		return errors.Wrapf(err, "failed to validate TestRun spec")
+		return errors.Wrapf(err, "failed to unmarshal the template of file %s has YAML: %s", o.File, output)
 	}
-	if test.Name == "" {
-		gitInfo, err := giturl.ParseGitURL(o.TestGitURL)
+
+	// modify labels
+	labels := u.GetLabels()
+	if labels == nil {
+		labels = map[string]string{}
+	}
+	if o.Labels["kind"] == "" {
+		o.Labels["kind"] = terraforms.LabelValueKindTest
+	}
+	for k, v := range o.Labels {
+		labels[k] = v
+	}
+	u.SetLabels(labels)
+
+	// modify name
+	u.SetName(o.ResourceName)
+	ns := o.Namespace
+	if ns != "" {
+		u.SetNamespace(ns)
+	}
+
+	kind := u.GetKind()
+	apiVersion := u.GetAPIVersion()
+	if kind == "" {
+		return errors.Errorf("generated template of file %s has missing kind", o.File)
+	}
+	if apiVersion == "" {
+		return errors.Errorf("generated template of file %s has missing apiVersion", o.File)
+	}
+
+	gv, err := schema.ParseGroupVersion(apiVersion)
+	if err != nil {
+		return errors.Wrapf(err, "failed to parse apiVersion: %s", apiVersion)
+	}
+	resourceName := strings.ToLower(kind) + "s"
+	gvr := schema.GroupVersionResource{Group: gv.Group, Version: gv.Version, Resource: resourceName}
+
+	o.Client = dynkube.DynamicResource(o.DynamicClient, ns, gvr)
+	ctx := o.GetContext()
+	selector := dynkube.ToSelector(o.Labels)
+
+	// lets delete all the previous resources for this Pull Request and Context
+	list, err := dynkube.DynamicResource(o.DynamicClient, ns, gvr).List(ctx, metav1.ListOptions{
+		LabelSelector: selector,
+	})
+	if err != nil && apierrors.IsNotFound(err) {
+		return errors.Wrapf(err, "could not find resources for ")
+	}
+	for _, r := range list.Items {
+		name := r.GetName()
+
+		err = dynkube.DynamicResource(o.DynamicClient, ns, gvr).Delete(ctx, name, metav1.DeleteOptions{})
 		if err != nil {
-			return errors.Wrapf(err, "failed to parse test git url %s", o.TestGitURL)
+			return errors.Wrapf(err, "failed to delete %s", name)
 		}
-		names := []string{gitInfo.Organisation, gitInfo.Name}
-		test.Name = naming.ToValidName(strings.Join(names, "-"))
+		log.Logger().Infof("deleted previous pipeline %s %s", kind, info(name))
+	}
+
+	// now lets create the new resource
+	name := o.Name
+	if name == "" {
+		return errors.Errorf("no name defaulted")
+	}
+
+	_, err = dynkube.DynamicResource(o.DynamicClient, ns, gvr).Get(ctx, name, metav1.GetOptions{})
+	if err == nil {
+		return errors.Errorf("should not have a %s called %s", kind, name)
+	}
+	if err != nil && !apierrors.IsNotFound(err) {
+		return errors.Wrapf(err, "failed to check if %s %s exists", kind, name)
+	}
+
+	u, err = dynkube.DynamicResource(o.DynamicClient, ns, gvr).Create(ctx, u, metav1.CreateOptions{})
+	if err != nil {
+		return errors.Wrapf(err, "failed to create %s %s", kind, name)
+	}
+	log.Logger().Infof("created %s %s", kind, info(name))
+
+	if o.NoWatchJob {
+		return nil
+	}
+	err = o.watchJob()
+	if err != nil {
+		return errors.Wrapf(err, "job failed to complete succesfully")
+	}
+
+	if o.NoDeleteResource {
+		return nil
+	}
+
+	err = dynkube.DynamicResource(o.DynamicClient, ns, gvr).Delete(ctx, name, metav1.DeleteOptions{})
+	if err != nil {
+		return errors.Wrapf(err, "failed to delete %s %s", kind, name)
+	}
+	log.Logger().Infof("Job succeeded so deleted %s %s", kind, info(name))
+	return nil
+}
+
+// Validate validates options
+func (o *Options) Validate() error {
+	err := o.Options.Validate()
+	if err != nil {
+		return errors.Wrapf(err, "failed to validate pipeline options")
+	}
+
+	if o.File == "" {
+		return options.MissingOption("file")
+	}
+	exists, err := files.FileExists(o.File)
+	if err != nil {
+		return errors.Wrapf(err, "failed to check if file exists %s", o.File)
+	}
+	if !exists {
+		return errors.Errorf("file %s does not exist", o.File)
+	}
+
+	// lets delete any old resources
+	if len(o.Labels) == 0 {
+		return errors.Errorf("no labels could be created")
+	}
+
+	if o.Env == nil {
+		o.Env = map[string]string{}
+	}
+	for _, e := range o.EnvVars {
+		values := strings.SplitN(e, "=", 2)
+		if len(values) < 2 {
+			return options.InvalidOptionf("env", e, "environment variables should be of the form name=value")
+		}
+		o.Env[values[0]] = values[1]
+	}
+	o.DynamicClient, err = kube.LazyCreateDynamicClient(o.DynamicClient)
+	if o.Namespace == "" {
+		o.Namespace, err = kubeclient.CurrentNamespace()
+		if err != nil {
+			return errors.Wrap(err, "failed to get current kubernetes namespace")
+		}
+	}
+	if o.CommandRunner == nil {
+		o.CommandRunner = cmdrunner.DefaultCommandRunner
+	}
+	return nil
+}
+
+// GetContext lazily creates a context if it doesn't exist already
+func (o *Options) GetContext() context.Context {
+	if o.Ctx == nil {
+		o.Ctx = context.TODO()
+	}
+	return o.Ctx
+}
+
+func (o *Options) watchJob() error {
+	c := &cmdrunner.Command{
+		Name: "jx",
+		Args: []string{"verify", "job", "--name", o.Name, "--namespace", o.Namespace},
+		Out:  os.Stdout,
+		Err:  os.Stderr,
+		In:   os.Stdin,
+	}
+	_, err := o.CommandRunner(c)
+	if err != nil {
+		return errors.Wrapf(err, "failed to run %s", c.CLI())
 	}
 	return nil
 }
