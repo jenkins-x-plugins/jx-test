@@ -85,6 +85,9 @@ func NewCmdCreate() (*cobra.Command, *Options) {
 	if err != nil {
 		log.Logger().Warnf("failed to default env vars: %s", err.Error())
 	}
+	if o.Options.ResourceNamePrefix == "" {
+		o.Options.ResourceNamePrefix = "tf-"
+	}
 
 	o.Options.AddFlags(cmd)
 
@@ -93,7 +96,7 @@ func NewCmdCreate() (*cobra.Command, *Options) {
 	cmd.Flags().StringArrayVarP(&o.EnvVars, "env", "e", nil, "specifies env vars of the form name=value")
 	cmd.Flags().BoolVarP(&o.NoWatchJob, "no-watch-job", "", false, "disables watching of the job created by the resource")
 	cmd.Flags().BoolVarP(&o.NoDeleteResource, "no-delete", "", false, "disables deleting of the test resource after the job has completed successfully")
-	cmd.Flags().BoolVarP(&o.LogResource, "log", "", false, "logs the generated resource before applying it")
+	cmd.Flags().BoolVarP(&o.LogResource, "log", "", true, "logs the generated resource before applying it")
 	return cmd, o
 }
 
