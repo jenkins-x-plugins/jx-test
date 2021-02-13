@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/jenkins-x/jx-test/pkg/dynkube"
 	"github.com/jenkins-x/jx-test/pkg/terraforms"
+	"regexp"
 
 	"github.com/Masterminds/sprig/v3"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/cmdrunner"
@@ -50,6 +51,7 @@ type Options struct {
 	File             string
 	Name             string
 	Namespace        string
+	EnvPattern       string
 	NoWatchJob       bool
 	NoDeleteResource bool
 	LogResource      bool
@@ -87,6 +89,7 @@ func NewCmdCreate() (*cobra.Command, *Options) {
 	o.Options.AddFlags(cmd)
 
 	cmd.Flags().StringVarP(&o.File, "file", "f", "", "the template file to create")
+	cmd.Flags().StringVarP(&o.EnvPattern, "env-pattern", "", "TF_.*", "the regular expression for environment variables to automatically include")
 	cmd.Flags().StringArrayVarP(&o.EnvVars, "env", "e", nil, "specifies env vars of the form name=value")
 	cmd.Flags().BoolVarP(&o.NoWatchJob, "no-watch-job", "", false, "disables watching of the job created by the resource")
 	cmd.Flags().BoolVarP(&o.NoDeleteResource, "no-delete", "", false, "disables deleting of the test resource after the job has completed successfully")
@@ -259,6 +262,27 @@ func (o *Options) Validate() error {
 		}
 		o.Env[values[0]] = values[1]
 	}
+
+	if o.EnvPattern != "" {
+		r, err := regexp.Compile(o.EnvPattern)
+		if err != nil {
+			return errors.Wrapf(err, "failed to parse option --env-pattern %s", o.EnvPattern)
+		}
+
+		// lets include any environment variables too
+		for _, e := range os.Environ() {
+			values := strings.SplitN(e, "=", 2)
+			if len(values) < 2 {
+				continue
+			}
+			k := values[0]
+			v := values[1]
+			if r.MatchString(k) && o.Env[k] == "" {
+				o.Env[k] = v
+			}
+		}
+	}
+
 	o.DynamicClient, err = kube.LazyCreateDynamicClient(o.DynamicClient)
 	if o.Namespace == "" {
 		o.Namespace, err = kubeclient.CurrentNamespace()
