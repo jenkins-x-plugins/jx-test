@@ -55,6 +55,7 @@ type Options struct {
 	NoWatchJob       bool
 	NoDeleteResource bool
 	LogResource      bool
+	VerifyResult     bool
 	Env              map[string]string
 	EnvVars          []string
 	DynamicClient    dynamic.Interface
@@ -97,6 +98,7 @@ func NewCmdCreate() (*cobra.Command, *Options) {
 	cmd.Flags().BoolVarP(&o.NoWatchJob, "no-watch-job", "", false, "disables watching of the job created by the resource")
 	cmd.Flags().BoolVarP(&o.NoDeleteResource, "no-delete", "", false, "disables deleting of the test resource after the job has completed successfully")
 	cmd.Flags().BoolVarP(&o.LogResource, "log", "", true, "logs the generated resource before applying it")
+	cmd.Flags().BoolVarP(&o.VerifyResult, "verify-result", "", false, "verifies the output of the boot job to ensure it succeeded")
 	return cmd, o
 }
 
@@ -308,9 +310,13 @@ func (o *Options) GetContext() context.Context {
 }
 
 func (o *Options) watchJob() error {
+	args := []string{"verify", "job", "--name", o.Name, "--namespace", o.Namespace}
+	if o.VerifyResult {
+		args = append(args, "--verify-result")
+	}
 	c := &cmdrunner.Command{
 		Name: "jx",
-		Args: []string{"verify", "job", "--name", o.Name, "--namespace", o.Namespace},
+		Args: args,
 		Out:  os.Stdout,
 		Err:  os.Stderr,
 		In:   os.Stdin,
