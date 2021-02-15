@@ -1,0 +1,79 @@
+{{- if .Capabilities.APIVersions.Has "jenkins.io/v1/Release" }}
+apiVersion: jenkins.io/v1
+kind: Release
+metadata:
+  creationTimestamp: "2021-02-15T05:39:45Z"
+  deletionTimestamp: null
+  name: '{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}'
+spec:
+  commits:
+  - author:
+      email: james.strachan@gmail.com
+      name: James Strachan
+    branch: master
+    committer:
+      email: james.strachan@gmail.com
+      name: James Strachan
+    message: |
+      chore: regen docs
+    sha: f00e9eb69fb3cd386d12fcfa0ce7908e722e1719
+  - author:
+      email: james.strachan@gmail.com
+      name: James Strachan
+    branch: master
+    committer:
+      email: james.strachan@gmail.com
+      name: James Strachan
+    message: |
+      fix: add verify result argument
+    sha: 5dff35953bfba74bb2f5ca3b3950075b2f684728
+  - author:
+      email: james.strachan@gmail.com
+      name: James Strachan
+    branch: master
+    committer:
+      email: james.strachan@gmail.com
+      name: James Strachan
+    message: |
+      chore: fix failing test
+    sha: 866f716c5dc49fafdc3c4fb21234ad474f68c50c
+  - author:
+      email: james.strachan@gmail.com
+      name: James Strachan
+    branch: master
+    committer:
+      email: james.strachan@gmail.com
+      name: James Strachan
+    message: |
+      docs: improve docs
+    sha: 91a0dfe10603d324351a18cacce5b3e15ce2c786
+  - author:
+      email: james.strachan@gmail.com
+      name: James Strachan
+    branch: master
+    committer:
+      email: james.strachan@gmail.com
+      name: James Strachan
+    message: |
+      chore: add helm chart for gc job
+    sha: 586b62adbda2ca657136e5e97883f43f98a881fd
+  - author:
+      email: james.strachan@gmail.com
+      name: James Strachan
+    branch: master
+    committer:
+      email: james.strachan@gmail.com
+      name: James Strachan
+    message: |
+      fix: lets use kubectl delete for gc
+
+      to ensure the finalizer works right
+    sha: 67bd30588abbf7c596db57ece67e2f49b463e0b8
+  gitHttpUrl: https://github.com/jenkins-x/jx-test
+  gitOwner: jenkins-x
+  gitRepository: jx-test
+  name: '{{ .Chart.Name }}'
+  version: 0.0.35
+status: {}
+ 
+{{- end }}
