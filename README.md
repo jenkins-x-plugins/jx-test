@@ -86,7 +86,10 @@ spec:
 You then run a Terraform based test by creating an instance of the resource passing in the template values:
 
 ```bash 
-jx test create --file tf.yaml -e TF_VAR_gcp_project=$PROJECT_ID -e TF_VAR_cluster_name=$CLUSTER_NAME
+
+export TF_VAR_gcp_project=myproject
+export TF_VAR_cluster_name=mycluster
+jx test create --file tf.yaml
 ```
 
 This command will:
@@ -96,6 +99,48 @@ This command will:
 * The [Terraform Operator](http://tf.isaaguilar.com/)  detects the `Terraform` and will create a `Job` to perform the `terraform apply` and then run any `postrunScript:` scripts
 
 * The terminal will tail the output of this Job and pass/fail based on the Job
+   
+
+## Viewing active test
+
+
+```bash 
+kubectl get terraform 
+```
+
+or the more brief:
+
+```bash 
+kubectl get tf 
+```
+
+## Garbage collecting failed tests
+
+Run the following command periodically:
+
+```bash 
+jx test gc
+```
+
+## Keeping failed tests
+
+If a test fails and you need time to investigate you can label the Terraform resource to ensure it doesn't get garbage collected as follows
+
+Run the following command periodically:
+
+```bash 
+kubectl label terraform mytest keep=yes
+```
+      
+When you are ready to remove the test case resources do:
+
+
+```bash 
+kubectl delete terraform mytest
+```
+
+
+
 
 ## Commands
 
