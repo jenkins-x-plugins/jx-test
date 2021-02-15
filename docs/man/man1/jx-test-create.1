@@ -40,6 +40,10 @@ Garbage collects test resources
     specifies env vars of the form name=value
 
 .PP
+\fB\-\-env\-pattern\fP="TF\_.*"
+    the regular expression for environment variables to automatically include
+
+.PP
 \fB\-f\fP, \fB\-\-file\fP=""
     the template file to create
 
@@ -48,11 +52,11 @@ Garbage collects test resources
     help for create
 
 .PP
-\fB\-\-log\fP[=false]
+\fB\-\-log\fP[=true]
     logs the generated resource before applying it
 
 .PP
-\fB\-\-name\-prefix\fP=""
+\fB\-\-name\-prefix\fP="tf\-"
     the resource name prefix
 
 .PP
@@ -82,6 +86,10 @@ Garbage collects test resources
 .PP
 \fB\-\-type\fP=""
     the pipeline type. e.g. presubmit or postsubmit. Defaults to $JOB\_TYPE
+
+.PP
+\fB\-\-verify\-result\fP[=false]
+    verifies the output of the boot job to ensure it succeeded
 
 .PP
 \fB\-\-version\fP="2.0.1300\-dev"
