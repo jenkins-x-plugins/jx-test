@@ -7,13 +7,13 @@ import (
 	"github.com/jenkins-x/jx-helpers/v3/pkg/termcolor"
 	"github.com/jenkins-x/jx-test/pkg/dynkube"
 	"github.com/jenkins-x/jx-test/pkg/terraforms"
+	"k8s.io/client-go/kubernetes"
 	"strings"
 	"time"
 
 	"github.com/jenkins-x/jx-helpers/v3/pkg/cobras/helper"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/cobras/templates"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/kube"
-	"github.com/jenkins-x/jx-kube-client/v3/pkg/kubeclient"
 	"github.com/jenkins-x/jx-logging/v3/pkg/log"
 	"github.com/jenkins-x/jx-test/pkg/root"
 	"github.com/pkg/errors"
@@ -40,6 +40,7 @@ type Options struct {
 	Selector      string
 	Namespace     string
 	Duration      time.Duration
+	KubeClient    kubernetes.Interface
 	DynamicClient dynamic.Interface
 	Ctx           context.Context
 	Client        dynamic.ResourceInterface
@@ -115,7 +116,7 @@ func (o *Options) Run() error {
 			continue
 		}
 
-		err = o.deleteTerraform(kind, name)
+		err = o.deleteTerraform(ctx, kind, name)
 		if err != nil {
 			return errors.Wrapf(err, "failed to delete %s %s", kind, name)
 		}
@@ -125,13 +126,19 @@ func (o *Options) Run() error {
 	return nil
 }
 
-func (o *Options) deleteTerraform(kind, name string) error {
+func (o *Options) deleteTerraform(ctx context.Context, kind, name string) error {
+	ns := o.Namespace
+	err := terraforms.DeleteActiveTerraformJobs(ctx, o.KubeClient, ns, name)
+	if err != nil {
+		return errors.Wrapf(err, "failed to delete active Terraform Jobs for namespace %s name %s", ns, name)
+	}
+
 	log.Logger().Infof("deleting %s %s", kind, info(name))
 	c := &cmdrunner.Command{
 		Name: "kubectl",
 		Args: []string{"delete", kind, name},
 	}
-	_, err := o.CommandRunner(c)
+	_, err = o.CommandRunner(c)
 	if err != nil {
 		return errors.Wrapf(err, "failed to run %s", c.CLI())
 	}
@@ -139,16 +146,17 @@ func (o *Options) deleteTerraform(kind, name string) error {
 }
 
 func (o *Options) Validate() error {
-	var err error
 	if o.CommandRunner == nil {
 		o.CommandRunner = cmdrunner.QuietCommandRunner
 	}
+	var err error
+	o.KubeClient, o.Namespace, err = kube.LazyCreateKubeClientAndNamespace(o.KubeClient, o.Namespace)
+	if err != nil {
+		return errors.Wrapf(err, "failed to create kube client")
+	}
 	o.DynamicClient, err = kube.LazyCreateDynamicClient(o.DynamicClient)
-	if o.Namespace == "" {
-		o.Namespace, err = kubeclient.CurrentNamespace()
-		if err != nil {
-			return errors.Wrap(err, "failed to get current kubernetes namespace")
-		}
+	if err != nil {
+		return errors.Wrapf(err, "failed to craete dynamic client")
 	}
 	return nil
 }

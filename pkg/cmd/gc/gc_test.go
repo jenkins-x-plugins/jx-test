@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/kubernetes/fake"
 	"testing"
 	"time"
 )
@@ -85,6 +86,7 @@ func TestGC(t *testing.T) {
 	o.Namespace = ns
 	o.DynamicClient = fakeDynClient
 	o.CommandRunner = runner.Run
+	o.KubeClient = fake.NewSimpleClientset()
 
 	err := o.Run()
 	require.NoError(t, err, "failed to run create command")

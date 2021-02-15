@@ -5,6 +5,7 @@ import (
 	"github.com/jenkins-x/jx-test/pkg/terraforms/tftests"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/fake"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -85,6 +86,7 @@ func TestCreate(t *testing.T) {
 	o.File = filepath.Join("test_data", "tf.yaml")
 	o.DynamicClient = fakeDynClient
 	o.CommandRunner = runner.Run
+	o.KubeClient = fake.NewSimpleClientset()
 
 	err := o.Run()
 	require.NoError(t, err, "failed to run create command")

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/jenkins-x/jx-test/pkg/dynkube"
 	"github.com/jenkins-x/jx-test/pkg/terraforms"
+	"k8s.io/client-go/kubernetes"
 	"regexp"
 
 	"github.com/Masterminds/sprig/v3"
@@ -17,7 +18,6 @@ import (
 	"github.com/jenkins-x/jx-helpers/v3/pkg/pipelinectx"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/templater"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/termcolor"
-	"github.com/jenkins-x/jx-kube-client/v3/pkg/kubeclient"
 	"github.com/jenkins-x/jx-logging/v3/pkg/log"
 	"github.com/jenkins-x/jx-test/pkg/root"
 	"github.com/pkg/errors"
@@ -58,6 +58,7 @@ type Options struct {
 	VerifyResult     bool
 	Env              map[string]string
 	EnvVars          []string
+	KubeClient       kubernetes.Interface
 	DynamicClient    dynamic.Interface
 	Ctx              context.Context
 	Client           dynamic.ResourceInterface
@@ -186,6 +187,11 @@ func (o *Options) Run() error {
 		for _, r := range list.Items {
 			name := r.GetName()
 
+			err = terraforms.DeleteActiveTerraformJobs(ctx, o.KubeClient, ns, name)
+			if err != nil {
+				return errors.Wrapf(err, "failed to delete active Terraform Jobs for namespace %s name %s", ns, name)
+			}
+
 			err = dynkube.DynamicResource(o.DynamicClient, ns, gvr).Delete(ctx, name, metav1.DeleteOptions{})
 			if err != nil {
 				return errors.Wrapf(err, "failed to delete %s", name)
@@ -288,12 +294,13 @@ func (o *Options) Validate() error {
 		}
 	}
 
+	o.KubeClient, o.Namespace, err = kube.LazyCreateKubeClientAndNamespace(o.KubeClient, o.Namespace)
+	if err != nil {
+		return errors.Wrapf(err, "failed to create kube client")
+	}
 	o.DynamicClient, err = kube.LazyCreateDynamicClient(o.DynamicClient)
-	if o.Namespace == "" {
-		o.Namespace, err = kubeclient.CurrentNamespace()
-		if err != nil {
-			return errors.Wrap(err, "failed to get current kubernetes namespace")
-		}
+	if err != nil {
+		return errors.Wrapf(err, "failed to craete dynamic client")
 	}
 	if o.CommandRunner == nil {
 		o.CommandRunner = cmdrunner.DefaultCommandRunner
