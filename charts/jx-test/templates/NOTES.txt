@@ -1,0 +1,5 @@
+jx-test has been installed successfully.
+
+To verify the GC CronJob is setup correctly, run:
+
+    kubectl --namespace={{ .Release.Namespace }} get cronjob -l "app={{ template "gcJobs.name" . }}"
