@@ -1,6 +1,7 @@
 package gc_test
 
 import (
+	"github.com/jenkins-x/jx-helpers/v3/pkg/cmdrunner/fakerunner"
 	"github.com/jenkins-x/jx-test/pkg/cmd/gc"
 	"github.com/jenkins-x/jx-test/pkg/terraforms/tftests"
 	"github.com/stretchr/testify/require"
@@ -57,6 +58,8 @@ metadata:
 func TestGC(t *testing.T) {
 	ns := "jx"
 
+	useKubectl := true
+
 	scheme := runtime.NewScheme()
 
 	now := time.Now()
@@ -73,22 +76,31 @@ func TestGC(t *testing.T) {
 		})
 	}
 
+	runner := &fakerunner.FakeRunner{}
+
 	dynObjects := tftests.ParseUnstructureds(t, fn, testResources)
 	fakeDynClient := tftests.NewFakeDynClient(scheme, dynObjects...)
 
 	_, o := gc.NewCmdGC()
 	o.Namespace = ns
 	o.DynamicClient = fakeDynClient
+	o.CommandRunner = runner.Run
 
 	err := o.Run()
 	require.NoError(t, err, "failed to run create command")
 
-	ctx := o.GetContext()
+	if useKubectl {
+		for _, c := range runner.OrderedCommands {
+			t.Logf("faked: %s\n", c.CLI())
+		}
+	} else {
+		ctx := o.GetContext()
 
-	list, err := o.Client.List(ctx, metav1.ListOptions{})
-	require.NoError(t, err, "failed to list resources")
-	require.NotNil(t, list, "no list resource returned")
-	require.Len(t, list.Items, 1, "should have GCd resources")
+		list, err := o.Client.List(ctx, metav1.ListOptions{})
+		require.NoError(t, err, "failed to list resources")
+		require.NotNil(t, list, "no list resource returned")
+		require.Len(t, list.Items, 1, "should have GCd resources")
 
-	t.Logf("has remaining Terraform %s\n", list.Items[0].GetName())
+		t.Logf("has remaining Terraform %s\n", list.Items[0].GetName())
+	}
 }
