@@ -3,6 +3,7 @@ package gc
 import (
 	"context"
 	"fmt"
+	"github.com/jenkins-x/jx-helpers/v3/pkg/cmdrunner"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/termcolor"
 	"github.com/jenkins-x/jx-test/pkg/dynkube"
 	"github.com/jenkins-x/jx-test/pkg/terraforms"
@@ -38,10 +39,11 @@ var (
 type Options struct {
 	Selector      string
 	Namespace     string
+	Duration      time.Duration
 	DynamicClient dynamic.Interface
 	Ctx           context.Context
 	Client        dynamic.ResourceInterface
-	Duration      time.Duration
+	CommandRunner cmdrunner.CommandRunner
 }
 
 // NewCmdGC creates a command object for the command
@@ -113,17 +115,34 @@ func (o *Options) Run() error {
 			continue
 		}
 
-		err = o.Client.Delete(ctx, name, metav1.DeleteOptions{})
+		err = o.deleteTerraform(kind, name)
 		if err != nil {
-			return errors.Wrapf(err, "failed to delete %s", name)
+			return errors.Wrapf(err, "failed to delete %s %s", kind, name)
 		}
+
 		log.Logger().Infof("deleted %s %s as it was created at: %s", kind, info(name), created.String())
+	}
+	return nil
+}
+
+func (o *Options) deleteTerraform(kind, name string) error {
+	log.Logger().Infof("deleting %s %s", kind, info(name))
+	c := &cmdrunner.Command{
+		Name: "kubectl",
+		Args: []string{"delete", kind, name},
+	}
+	_, err := o.CommandRunner(c)
+	if err != nil {
+		return errors.Wrapf(err, "failed to run %s", c.CLI())
 	}
 	return nil
 }
 
 func (o *Options) Validate() error {
 	var err error
+	if o.CommandRunner == nil {
+		o.CommandRunner = cmdrunner.QuietCommandRunner
+	}
 	o.DynamicClient, err = kube.LazyCreateDynamicClient(o.DynamicClient)
 	if o.Namespace == "" {
 		o.Namespace, err = kubeclient.CurrentNamespace()
