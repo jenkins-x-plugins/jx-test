@@ -246,6 +246,9 @@ func (o *Options) Validate() error {
 	if err != nil {
 		return errors.Wrapf(err, "failed to validate pipeline options")
 	}
+	if o.CommandRunner == nil {
+		o.CommandRunner = cmdrunner.DefaultCommandRunner
+	}
 
 	if o.File == "" {
 		return options.MissingOption("file")
@@ -293,6 +296,23 @@ func (o *Options) Validate() error {
 			}
 		}
 	}
+	if o.Env["JX_VERSION"] == "" {
+		c := &cmdrunner.Command{
+			Name: "jx",
+			Args: []string{"version", "-q"},
+		}
+		v, err := o.CommandRunner(c)
+		if err != nil {
+			return errors.Wrapf(err, "failed to run command: %s", c.CLI())
+		}
+		v = strings.TrimSpace(v)
+		if v == "" {
+			log.Logger().Warnf("could not find jx version")
+		} else {
+			log.Logger().Infof("using jx version: %s", info(v))
+			o.Env["JX_VERSION"] = v
+		}
+	}
 
 	o.KubeClient, o.Namespace, err = kube.LazyCreateKubeClientAndNamespace(o.KubeClient, o.Namespace)
 	if err != nil {
@@ -301,9 +321,6 @@ func (o *Options) Validate() error {
 	o.DynamicClient, err = kube.LazyCreateDynamicClient(o.DynamicClient)
 	if err != nil {
 		return errors.Wrapf(err, "failed to craete dynamic client")
-	}
-	if o.CommandRunner == nil {
-		o.CommandRunner = cmdrunner.DefaultCommandRunner
 	}
 	return nil
 }
