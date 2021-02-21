@@ -1,0 +1,49 @@
+{{- if .Capabilities.APIVersions.Has "jenkins.io/v1/Release" }}
+apiVersion: jenkins.io/v1
+kind: Release
+metadata:
+  creationTimestamp: "2021-02-21T08:33:23Z"
+  deletionTimestamp: null
+  name: '{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}'
+spec:
+  commits:
+  - author:
+      email: james.strachan@gmail.com
+      name: James Strachan
+    branch: master
+    committer:
+      email: james.strachan@gmail.com
+      name: James Strachan
+    message: |
+      fix: lets delete the terraform pods
+
+      on delete of the test
+    sha: 7fac49ea8900e893249c8fd7b9bf85baeaa1b8ca
+  - author:
+      email: james.strachan@gmail.com
+      name: James Strachan
+    branch: master
+    committer:
+      email: james.strachan@gmail.com
+      name: James Strachan
+    message: |
+      fix: lets default the jx version env var
+    sha: 480827b88701a31425d006dd506798704b870bc1
+  - author:
+      email: james.strachan@gmail.com
+      name: James Strachan
+    branch: master
+    committer:
+      email: james.strachan@gmail.com
+      name: James Strachan
+    message: |
+      fix: let the GC job delete jobs too
+    sha: 7c1d279e1e7d1efe9da608dfd74b18b4f76e90d2
+  gitHttpUrl: https://github.com/jenkins-x/jx-test
+  gitOwner: jenkins-x
+  gitRepository: jx-test
+  name: '{{ .Chart.Name }}'
+  version: 0.0.38
+status: {}
+ 
+{{- end }}

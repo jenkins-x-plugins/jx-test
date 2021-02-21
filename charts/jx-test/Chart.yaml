@@ -3,6 +3,6 @@ description: |
   This chart installs the jx-test CronJob to garbage collect failed system test resources
 icon: https://raw.githubusercontent.com/jenkins-x/jenkins-x-website/master/images/logo/jenkinsx-icon-color.svg
 name: jx-test
-version: 0.1.0-SNAPSHOT
+version: 0.0.38
 home: https://github.com/jenkins-x-plugins/jx-test
 
