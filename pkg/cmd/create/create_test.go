@@ -1,8 +1,8 @@
 package create_test
 
 import (
+	"github.com/jenkins-x-plugins/jx-test/pkg/terraforms/tftests"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/cmdrunner/fakerunner"
-	"github.com/jenkins-x/jx-test/pkg/terraforms/tftests"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/jenkins-x/jx-test/pkg/cmd/create"
+	"github.com/jenkins-x-plugins/jx-test/pkg/cmd/create"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

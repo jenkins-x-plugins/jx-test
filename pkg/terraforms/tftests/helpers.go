@@ -1,7 +1,7 @@
 package tftests
 
 import (
-	"github.com/jenkins-x/jx-test/pkg/terraforms"
+	"github.com/jenkins-x-plugins/jx-test/pkg/terraforms"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"

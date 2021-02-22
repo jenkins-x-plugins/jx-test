@@ -1,12 +1,12 @@
 package cmd
 
 import (
+	"github.com/jenkins-x-plugins/jx-test/pkg/cmd/create"
+	"github.com/jenkins-x-plugins/jx-test/pkg/cmd/gc"
+	"github.com/jenkins-x-plugins/jx-test/pkg/cmd/version"
+	"github.com/jenkins-x-plugins/jx-test/pkg/root"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/cobras"
 	"github.com/jenkins-x/jx-logging/v3/pkg/log"
-	"github.com/jenkins-x/jx-test/pkg/cmd/create"
-	"github.com/jenkins-x/jx-test/pkg/cmd/gc"
-	"github.com/jenkins-x/jx-test/pkg/cmd/version"
-	"github.com/jenkins-x/jx-test/pkg/root"
 	"github.com/spf13/cobra"
 )
 

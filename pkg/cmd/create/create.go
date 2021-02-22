@@ -3,12 +3,13 @@ package create
 import (
 	"context"
 	"fmt"
-	"github.com/jenkins-x/jx-test/pkg/dynkube"
-	"github.com/jenkins-x/jx-test/pkg/terraforms"
+	"github.com/jenkins-x-plugins/jx-test/pkg/dynkube"
+	"github.com/jenkins-x-plugins/jx-test/pkg/terraforms"
 	"k8s.io/client-go/kubernetes"
 	"regexp"
 
 	"github.com/Masterminds/sprig/v3"
+	"github.com/jenkins-x-plugins/jx-test/pkg/root"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/cmdrunner"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/cobras/helper"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/cobras/templates"
@@ -19,7 +20,6 @@ import (
 	"github.com/jenkins-x/jx-helpers/v3/pkg/templater"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/termcolor"
 	"github.com/jenkins-x/jx-logging/v3/pkg/log"
-	"github.com/jenkins-x/jx-test/pkg/root"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"io/ioutil"

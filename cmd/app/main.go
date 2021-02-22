@@ -3,7 +3,7 @@
 package app
 
 import (
-	"github.com/jenkins-x/jx-test/pkg/cmd"
+	"github.com/jenkins-x-plugins/jx-test/pkg/cmd"
 )
 
 // Run runs the command, if args are not nil they will be set on the command

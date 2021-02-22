@@ -1,9 +1,9 @@
 package gc_test
 
 import (
+	"github.com/jenkins-x-plugins/jx-test/pkg/cmd/gc"
+	"github.com/jenkins-x-plugins/jx-test/pkg/terraforms/tftests"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/cmdrunner/fakerunner"
-	"github.com/jenkins-x/jx-test/pkg/cmd/gc"
-	"github.com/jenkins-x/jx-test/pkg/terraforms/tftests"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
