@@ -1,0 +1,39 @@
+{{- if .Capabilities.APIVersions.Has "jenkins.io/v1/Release" }}
+apiVersion: jenkins.io/v1
+kind: Release
+metadata:
+  creationTimestamp: "2021-03-08T14:54:35Z"
+  deletionTimestamp: null
+  name: '{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}'
+spec:
+  commits:
+  - author:
+      email: james.strachan@gmail.com
+      name: James Strachan
+    branch: master
+    committer:
+      email: james.strachan@gmail.com
+      name: James Strachan
+    message: |
+      fix: allow positive tests to be kept if labelled
+
+      in case you want to do further testing on a test cluster
+    sha: 10959bd2185dab8323033b8338e936427176e93c
+  - author:
+      email: james.strachan@gmail.com
+      name: James Strachan
+    branch: master
+    committer:
+      email: james.strachan@gmail.com
+      name: James Strachan
+    message: |
+      chore: move to the plugins organisation
+    sha: d42b6318668c43f857b11a6a699cd5c3efcbf50e
+  gitHttpUrl: https://github.com/jenkins-x-plugins/jx-test
+  gitOwner: jenkins-x-plugins
+  gitRepository: jx-test
+  name: '{{ .Chart.Name }}'
+  version: 0.0.40
+status: {}
+ 
+{{- end }}
