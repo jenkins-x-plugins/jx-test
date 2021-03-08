@@ -232,6 +232,21 @@ func (o *Options) Run() error {
 		return nil
 	}
 
+	tf, err := dynkube.DynamicResource(o.DynamicClient, ns, gvr).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return errors.Wrapf(err, "failed to find Terraform %s in namespace %s", name, ns)
+	}
+
+	labels = tf.GetLabels()
+	if labels != nil {
+		keep := labels["keep"]
+		log.Logger().Infof("test Terraform %s in namespace %s has keep label %s", info(name), info(ns), info(keep))
+		if keep == "yes" || keep == "true" {
+			log.Logger().Infof("not removing the test Terraform %s in namespace %s as it has a keep label", info(name), info(ns))
+			return nil
+		}
+	}
+
 	err = dynkube.DynamicResource(o.DynamicClient, ns, gvr).Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
 		return errors.Wrapf(err, "failed to delete %s %s", kind, name)
