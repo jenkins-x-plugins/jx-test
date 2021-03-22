@@ -33,6 +33,8 @@ var (
 	cmdExample = templates.Examples(`
 		%s gc
 	`)
+
+	terraformStateSelector = "tfstate=true"
 )
 
 // Options the options for the command
@@ -123,6 +125,16 @@ func (o *Options) Run() error {
 
 		log.Logger().Infof("deleted %s %s as it was created at: %s", kind, info(name), created.String())
 	}
+
+	err = o.gcLeases(ctx, createdTime)
+	if err != nil {
+		return errors.Wrapf(err, "failed to GC leases")
+	}
+
+	err = o.gcTerraformState(ctx, createdTime)
+	if err != nil {
+		return errors.Wrapf(err, "failed to GC terraform state")
+	}
 	return nil
 }
 
@@ -167,4 +179,65 @@ func (o *Options) GetContext() context.Context {
 		o.Ctx = context.TODO()
 	}
 	return o.Ctx
+}
+
+func (o *Options) gcLeases(ctx context.Context, createdTime *metav1.Time) error {
+	leaseInterface := o.KubeClient.CoordinationV1().Leases(o.Namespace)
+	list, err := leaseInterface.List(ctx, metav1.ListOptions{
+		LabelSelector: terraformStateSelector,
+	})
+	if apierrors.IsNotFound(err) {
+		err = nil
+	}
+	if err != nil {
+		return errors.Wrapf(err, "failed to list Leases in namespace %s with selector %s", o.Namespace, terraformStateSelector)
+	}
+	if list == nil {
+		return nil
+	}
+
+	for _, r := range list.Items {
+		created := r.GetCreationTimestamp()
+		if !created.Before(createdTime) {
+			log.Logger().Debugf("not removing Lease %s as it was created at %s", r.Name, created.String())
+			continue
+		}
+		err = leaseInterface.Delete(ctx, r.Name, metav1.DeleteOptions{})
+		if err != nil {
+			return errors.Wrapf(err, "failed to delete Lease %s in namespace %s", r.Name, o.Namespace)
+		}
+		log.Logger().Infof("deleted Lease %s", r.Name)
+	}
+	return nil
+}
+
+func (o *Options) gcTerraformState(ctx context.Context, createdTime *metav1.Time) error {
+	secretInterface := o.KubeClient.CoreV1().Secrets(o.Namespace)
+
+	list, err := secretInterface.List(ctx, metav1.ListOptions{
+		LabelSelector: terraformStateSelector,
+	})
+	if apierrors.IsNotFound(err) {
+		err = nil
+	}
+	if err != nil {
+		return errors.Wrapf(err, "failed to list Secrets in namespace %s with selector %s", o.Namespace, terraformStateSelector)
+	}
+	if list == nil {
+		return nil
+	}
+
+	for _, r := range list.Items {
+		created := r.GetCreationTimestamp()
+		if !created.Before(createdTime) {
+			log.Logger().Debugf("not removing Secret %s as it was created at %s", r.Name, created.String())
+			continue
+		}
+		err = secretInterface.Delete(ctx, r.Name, metav1.DeleteOptions{})
+		if err != nil {
+			return errors.Wrapf(err, "failed to delete Secret %s in namespace %s", r.Name, o.Namespace)
+		}
+		log.Logger().Infof("deleted Secret %s", r.Name)
+	}
+	return nil
 }
