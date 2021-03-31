@@ -13,6 +13,10 @@ image:
 # the age of Terraform resources to remove
 duration: 2h
 
+jx:
+  # whether to create a Release CRD when installing charts with Release CRDs included
+  releaseCRD: false
+
 gcJobs:
   # gcJobs.schedule -- Cron expression to periodically garbage collect test resources; every hour by default
   schedule: "0 * * * *"
