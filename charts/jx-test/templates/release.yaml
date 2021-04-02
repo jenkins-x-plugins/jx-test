@@ -1,0 +1,46 @@
+{{- if and (.Capabilities.APIVersions.Has "jenkins.io/v1/Release") (hasKey .Values.jx "releaseCRD") (.Values.jx.releaseCRD)}}
+apiVersion: jenkins.io/v1
+kind: Release
+metadata:
+  creationTimestamp: "2021-04-02T09:23:12Z"
+  deletionTimestamp: null
+  name: '{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}'
+spec:
+  commits:
+  - author:
+      email: james.strachan@gmail.com
+      name: James Strachan
+    branch: master
+    committer:
+      email: noreply@github.com
+      name: GitHub
+    message: Update updatebot.yaml
+    sha: ce768554f98335999e596c3157f3bf16f091d09a
+  - author:
+      email: james.strachan@gmail.com
+      name: James Strachan
+    branch: master
+    committer:
+      email: james.strachan@gmail.com
+      name: James Strachan
+    message: |
+      chore: fix chart release
+    sha: 1ab02bc26ab8faeb8a09846948c70e5439804f31
+  - author:
+      email: james.strachan@gmail.com
+      name: James Strachan
+    branch: master
+    committer:
+      email: james.strachan@gmail.com
+      name: James Strachan
+    message: |
+      fix: allow RBAC to delete secrets and leases
+    sha: 33016b5e569906bfdc8084f78ca1aa8669183489
+  gitHttpUrl: https://github.com/jenkins-x-plugins/jx-test
+  gitOwner: jenkins-x-plugins
+  gitRepository: jx-test
+  name: '{{ .Chart.Name }}'
+  version: 0.0.43
+status: {}
+ 
+{{- end }}
