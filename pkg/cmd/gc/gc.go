@@ -221,7 +221,9 @@ func (o *Options) gcLeases(ctx context.Context, createdTime *metav1.Time) error 
 func (o *Options) gcTerraformState(ctx context.Context, createdTime *metav1.Time) error {
 	secretInterface := o.KubeClient.CoreV1().Secrets(o.Namespace)
 
-	list, err := secretInterface.List(ctx, metav1.ListOptions{})
+	list, err := secretInterface.List(ctx, metav1.ListOptions{
+		LabelSelector: terraformStateSelector,
+	})
 	if apierrors.IsNotFound(err) {
 		err = nil
 	}
@@ -253,9 +255,7 @@ func (o *Options) gcTerraformState(ctx context.Context, createdTime *metav1.Time
 func (o *Options) gcTerraformConfigMaps(ctx context.Context, createdTime *metav1.Time) error {
 	configMapInterface := o.KubeClient.CoreV1().ConfigMaps(o.Namespace)
 
-	list, err := configMapInterface.List(ctx, metav1.ListOptions{
-		LabelSelector: terraformStateSelector,
-	})
+	list, err := configMapInterface.List(ctx, metav1.ListOptions{})
 	if apierrors.IsNotFound(err) {
 		err = nil
 	}
