@@ -39,14 +39,15 @@ var (
 
 // Options the options for the command
 type Options struct {
-	Selector      string
-	Namespace     string
-	Duration      time.Duration
-	KubeClient    kubernetes.Interface
-	DynamicClient dynamic.Interface
-	Ctx           context.Context
-	Client        dynamic.ResourceInterface
-	CommandRunner cmdrunner.CommandRunner
+	Selector                 string
+	Namespace                string
+	TerraformConfigMapPrefix string
+	Duration                 time.Duration
+	KubeClient               kubernetes.Interface
+	DynamicClient            dynamic.Interface
+	Ctx                      context.Context
+	Client                   dynamic.ResourceInterface
+	CommandRunner            cmdrunner.CommandRunner
 }
 
 // NewCmdGC creates a command object for the command
@@ -70,6 +71,7 @@ func NewCmdGC() (*cobra.Command, *Options) {
 
 	cmd.Flags().StringVarP(&o.Namespace, "ns", "n", "", "the namespace to query the Terraform resources")
 	cmd.Flags().StringVarP(&o.Selector, "selector", "l", "kind="+terraforms.LabelValueKindTest, "the selector to find the Terraform resources to remove")
+	cmd.Flags().StringVarP(&o.TerraformConfigMapPrefix, "tf-cm-prefix", "t", "tf-jx3-versions-", "the ConfigMap name prefix of the Terraform state")
 	cmd.Flags().DurationVarP(&o.Duration, "duration", "d", 2*time.Hour, "The maximum age of a Terraform resource before it is garbage collected")
 	return cmd, o
 }
@@ -134,6 +136,11 @@ func (o *Options) Run() error {
 	err = o.gcTerraformState(ctx, createdTime)
 	if err != nil {
 		return errors.Wrapf(err, "failed to GC terraform state")
+	}
+
+	err = o.gcTerraformConfigMaps(ctx, createdTime)
+	if err != nil {
+		return errors.Wrapf(err, "failed to GC terraform configs")
 	}
 	return nil
 }
@@ -214,9 +221,7 @@ func (o *Options) gcLeases(ctx context.Context, createdTime *metav1.Time) error 
 func (o *Options) gcTerraformState(ctx context.Context, createdTime *metav1.Time) error {
 	secretInterface := o.KubeClient.CoreV1().Secrets(o.Namespace)
 
-	list, err := secretInterface.List(ctx, metav1.ListOptions{
-		LabelSelector: terraformStateSelector,
-	})
+	list, err := secretInterface.List(ctx, metav1.ListOptions{})
 	if apierrors.IsNotFound(err) {
 		err = nil
 	}
@@ -228,6 +233,9 @@ func (o *Options) gcTerraformState(ctx context.Context, createdTime *metav1.Time
 	}
 
 	for _, r := range list.Items {
+		if !strings.HasPrefix(r.Name, o.TerraformConfigMapPrefix) {
+			continue
+		}
 		created := r.GetCreationTimestamp()
 		if !created.Before(createdTime) {
 			log.Logger().Debugf("not removing Secret %s as it was created at %s", r.Name, created.String())
@@ -238,6 +246,37 @@ func (o *Options) gcTerraformState(ctx context.Context, createdTime *metav1.Time
 			return errors.Wrapf(err, "failed to delete Secret %s in namespace %s", r.Name, o.Namespace)
 		}
 		log.Logger().Infof("deleted Secret %s", r.Name)
+	}
+	return nil
+}
+
+func (o *Options) gcTerraformConfigMaps(ctx context.Context, createdTime *metav1.Time) error {
+	configMapInterface := o.KubeClient.CoreV1().ConfigMaps(o.Namespace)
+
+	list, err := configMapInterface.List(ctx, metav1.ListOptions{
+		LabelSelector: terraformStateSelector,
+	})
+	if apierrors.IsNotFound(err) {
+		err = nil
+	}
+	if err != nil {
+		return errors.Wrapf(err, "failed to list ConfigMaps in namespace %s with selector %s", o.Namespace, terraformStateSelector)
+	}
+	if list == nil {
+		return nil
+	}
+
+	for _, r := range list.Items {
+		created := r.GetCreationTimestamp()
+		if !created.Before(createdTime) {
+			log.Logger().Debugf("not removing ConfigMap %s as it was created at %s", r.Name, created.String())
+			continue
+		}
+		err = configMapInterface.Delete(ctx, r.Name, metav1.DeleteOptions{})
+		if err != nil {
+			return errors.Wrapf(err, "failed to delete ConfigMap %s in namespace %s", r.Name, o.Namespace)
+		}
+		log.Logger().Infof("deleted ConfigMap %s", r.Name)
 	}
 	return nil
 }
