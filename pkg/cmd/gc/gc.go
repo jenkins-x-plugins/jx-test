@@ -35,6 +35,8 @@ var (
 	`)
 
 	terraformStateSelector = "tfstate=true"
+
+	defaultTerraformConfigMapPrefix = "tf-jx3-versions-"
 )
 
 // Options the options for the command
@@ -71,7 +73,7 @@ func NewCmdGC() (*cobra.Command, *Options) {
 
 	cmd.Flags().StringVarP(&o.Namespace, "ns", "n", "", "the namespace to query the Terraform resources")
 	cmd.Flags().StringVarP(&o.Selector, "selector", "l", "kind="+terraforms.LabelValueKindTest, "the selector to find the Terraform resources to remove")
-	cmd.Flags().StringVarP(&o.TerraformConfigMapPrefix, "tf-cm-prefix", "t", "tf-jx3-versions-", "the ConfigMap name prefix of the Terraform state")
+	cmd.Flags().StringVarP(&o.TerraformConfigMapPrefix, "tf-cm-prefix", "t", defaultTerraformConfigMapPrefix, "the ConfigMap name prefix of the Terraform state")
 	cmd.Flags().DurationVarP(&o.Duration, "duration", "d", 2*time.Hour, "The maximum age of a Terraform resource before it is garbage collected")
 	return cmd, o
 }
@@ -235,9 +237,6 @@ func (o *Options) gcTerraformState(ctx context.Context, createdTime *metav1.Time
 	}
 
 	for _, r := range list.Items {
-		if !strings.HasPrefix(r.Name, o.TerraformConfigMapPrefix) {
-			continue
-		}
 		created := r.GetCreationTimestamp()
 		if !created.Before(createdTime) {
 			log.Logger().Debugf("not removing Secret %s as it was created at %s", r.Name, created.String())
@@ -253,6 +252,10 @@ func (o *Options) gcTerraformState(ctx context.Context, createdTime *metav1.Time
 }
 
 func (o *Options) gcTerraformConfigMaps(ctx context.Context, createdTime *metav1.Time) error {
+	if o.TerraformConfigMapPrefix == "" {
+		o.TerraformConfigMapPrefix = defaultTerraformConfigMapPrefix
+	}
+
 	configMapInterface := o.KubeClient.CoreV1().ConfigMaps(o.Namespace)
 
 	list, err := configMapInterface.List(ctx, metav1.ListOptions{})
@@ -267,6 +270,9 @@ func (o *Options) gcTerraformConfigMaps(ctx context.Context, createdTime *metav1
 	}
 
 	for _, r := range list.Items {
+		if !strings.HasPrefix(r.Name, o.TerraformConfigMapPrefix) {
+			continue
+		}
 		created := r.GetCreationTimestamp()
 		if !created.Before(createdTime) {
 			log.Logger().Debugf("not removing ConfigMap %s as it was created at %s", r.Name, created.String())
