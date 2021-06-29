@@ -1,32 +1,22 @@
 image:
   # image.parentRepository -- Docker registry to pull images from
   parentRepository: gcr.io/jenkinsxio
-
-  repository: gcr.io/jenkinsxio/jx-test
-
+  repository: ghcr.io/jenkins-x/jx-test
   # image.tag -- Docker images tag
-  tag: 0.0.35
-
+  tag: 0.0.48
   # image.pullPolicy -- Image pull policy
   pullPolicy: IfNotPresent
-
 # the age of Terraform resources to remove
 duration: 2h
-
 jx:
   # whether to create a Release CRD when installing charts with Release CRDs included
   releaseCRD: false
-
 gcJobs:
   # gcJobs.schedule -- Cron expression to periodically garbage collect test resources; every hour by default
   schedule: "0 * * * *"
-
   # gcJobs.failedJobsHistoryLimit -- Drives the failed jobs history limit
   failedJobsHistoryLimit: 1
-
   # gcJobs.successfulJobsHistoryLimit -- Drives the successful jobs history limit
   successfulJobsHistoryLimit: 3
-
   # gcJobs.concurrencyPolicy -- Drives the job's concurrency policy
   concurrencyPolicy: Forbid
-
