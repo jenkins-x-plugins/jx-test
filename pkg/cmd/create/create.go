@@ -314,7 +314,7 @@ func (o *Options) Validate() error {
 	if o.Env["JX_VERSION"] == "" {
 		c := &cmdrunner.Command{
 			Name: "jx",
-			Args: []string{"version", "-q"},
+			Args: []string{"version", "-s"},
 		}
 		v, err := o.CommandRunner(c)
 		if err != nil {
