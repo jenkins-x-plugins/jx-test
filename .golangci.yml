@@ -36,6 +36,7 @@ linters-settings:
       - wrapperFunc
       - importShadow # not important for now
       - unnamedResult # not important
+      - rangeValCopy
   gocyclo:
     min-complexity: 15
   goimports: {}
@@ -95,7 +96,4 @@ run:
 # https://github.com/golangci/golangci/wiki/Configuration
 issues:
  exclude-dirs:
-  - test/testdata_etc
-  - internal/cache
-  - internal/renameio
-  - internal/robustio
+  - cmd/docs

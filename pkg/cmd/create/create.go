@@ -3,10 +3,13 @@ package create
 import (
 	"context"
 	"fmt"
+	"os"
+	"regexp"
+	"strings"
+
 	"github.com/jenkins-x-plugins/jx-test/pkg/dynkube"
 	"github.com/jenkins-x-plugins/jx-test/pkg/terraforms"
 	"k8s.io/client-go/kubernetes"
-	"regexp"
 
 	"github.com/Masterminds/sprig/v3"
 	"github.com/jenkins-x-plugins/jx-test/pkg/root"
@@ -20,17 +23,14 @@ import (
 	"github.com/jenkins-x/jx-helpers/v3/pkg/templater"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/termcolor"
 	"github.com/jenkins-x/jx-logging/v3/pkg/log"
-	"github.com/pkg/errors"
+
 	"github.com/spf13/cobra"
-	"io/ioutil"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
-	"os"
 	"sigs.k8s.io/yaml"
-	"strings"
 )
 
 var (
@@ -74,7 +74,7 @@ func NewCmdCreate() (*cobra.Command, *Options) {
 		Short:   "Create a new TestRun resource to record the test case resources",
 		Long:    cmdLong,
 		Example: fmt.Sprintf(cmdExample, root.BinaryName),
-		Run: func(cmd *cobra.Command, args []string) {
+		Run: func(_ *cobra.Command, _ []string) {
 			err := o.Run()
 			helper.CheckErr(err)
 		},
@@ -107,15 +107,15 @@ func NewCmdCreate() (*cobra.Command, *Options) {
 func (o *Options) Run() error {
 	err := o.Validate()
 	if err != nil {
-		return errors.Wrapf(err, "failed to validate")
+		return fmt.Errorf("failed to validate: %w", err)
 	}
 
 	log.Logger().Infof("resource: %s", info(o.ResourceName))
 	log.Logger().Infof("labels: %v", o.Labels)
 
-	templateText, err := ioutil.ReadFile(o.File)
+	templateText, err := os.ReadFile(o.File)
 	if err != nil {
-		return errors.Wrapf(err, "failed to read %s", o.File)
+		return fmt.Errorf("failed to read %s: %w", o.File, err)
 	}
 
 	o.Name = o.ResourceName
@@ -123,7 +123,7 @@ func (o *Options) Run() error {
 
 	output, err := templater.Evaluate(funcMap, o, string(templateText), o.File, "resource template")
 	if err != nil {
-		return errors.Wrapf(err, "failed to evaluate template %s", o.File)
+		return fmt.Errorf("failed to evaluate template %s: %w", o.File, err)
 	}
 
 	if o.LogResource {
@@ -133,7 +133,7 @@ func (o *Options) Run() error {
 	u := &unstructured.Unstructured{}
 	err = yaml.Unmarshal([]byte(output), u)
 	if err != nil {
-		return errors.Wrapf(err, "failed to unmarshal the template of file %s has YAML: %s", o.File, output)
+		return fmt.Errorf("failed to unmarshal the template of file %s has YAML: %s: %w", o.File, output, err)
 	}
 
 	// modify labels
@@ -159,15 +159,15 @@ func (o *Options) Run() error {
 	kind := u.GetKind()
 	apiVersion := u.GetAPIVersion()
 	if kind == "" {
-		return errors.Errorf("generated template of file %s has missing kind", o.File)
+		return fmt.Errorf("generated template of file %s has missing kind", o.File)
 	}
 	if apiVersion == "" {
-		return errors.Errorf("generated template of file %s has missing apiVersion", o.File)
+		return fmt.Errorf("generated template of file %s has missing apiVersion", o.File)
 	}
 
 	gv, err := schema.ParseGroupVersion(apiVersion)
 	if err != nil {
-		return errors.Wrapf(err, "failed to parse apiVersion: %s", apiVersion)
+		return fmt.Errorf("failed to parse apiVersion: %s: %w", apiVersion, err)
 	}
 	resourceName := strings.ToLower(kind) + "s"
 	gvr := schema.GroupVersionResource{Group: gv.Group, Version: gv.Version, Resource: resourceName}
@@ -181,7 +181,7 @@ func (o *Options) Run() error {
 		LabelSelector: selector,
 	})
 	if err != nil && apierrors.IsNotFound(err) {
-		return errors.Wrapf(err, "could not find resources for ")
+		return fmt.Errorf("could not find resources for : %w", err)
 	}
 	if list != nil {
 		for _, r := range list.Items {
@@ -189,12 +189,12 @@ func (o *Options) Run() error {
 
 			err = terraforms.DeleteActiveTerraformJobs(ctx, o.KubeClient, ns, name)
 			if err != nil {
-				return errors.Wrapf(err, "failed to delete active Terraform Jobs for namespace %s name %s", ns, name)
+				return fmt.Errorf("failed to delete active Terraform Jobs for namespace %s name %s: %w", ns, name, err)
 			}
 
 			err = dynkube.DynamicResource(o.DynamicClient, ns, gvr).Delete(ctx, name, metav1.DeleteOptions{})
 			if err != nil {
-				return errors.Wrapf(err, "failed to delete %s", name)
+				return fmt.Errorf("failed to delete %s: %w", name, err)
 			}
 			log.Logger().Infof("deleted previous pipeline %s %s", kind, info(name))
 		}
@@ -203,20 +203,20 @@ func (o *Options) Run() error {
 	// now lets create the new resource
 	name := o.Name
 	if name == "" {
-		return errors.Errorf("no name defaulted")
+		return fmt.Errorf("no name defaulted")
 	}
 
 	_, err = dynkube.DynamicResource(o.DynamicClient, ns, gvr).Get(ctx, name, metav1.GetOptions{})
 	if err == nil {
-		return errors.Errorf("should not have a %s called %s", kind, name)
+		return fmt.Errorf("should not have a %s called %s", kind, name)
 	}
 	if err != nil && !apierrors.IsNotFound(err) {
-		return errors.Wrapf(err, "failed to check if %s %s exists", kind, name)
+		return fmt.Errorf("failed to check if %s %s exists: %w", kind, name, err)
 	}
 
-	u, err = dynkube.DynamicResource(o.DynamicClient, ns, gvr).Create(ctx, u, metav1.CreateOptions{})
+	_, err = dynkube.DynamicResource(o.DynamicClient, ns, gvr).Create(ctx, u, metav1.CreateOptions{})
 	if err != nil {
-		return errors.Wrapf(err, "failed to create %s %s", kind, name)
+		return fmt.Errorf("failed to create %s %s: %w", kind, name, err)
 	}
 	log.Logger().Infof("created %s %s", kind, info(name))
 
@@ -225,7 +225,7 @@ func (o *Options) Run() error {
 	}
 	err = o.watchJob()
 	if err != nil {
-		return errors.Wrapf(err, "job failed to complete succesfully")
+		return fmt.Errorf("job failed to complete successfully: %w", err)
 	}
 
 	if o.NoDeleteResource {
@@ -234,7 +234,7 @@ func (o *Options) Run() error {
 
 	tf, err := dynkube.DynamicResource(o.DynamicClient, ns, gvr).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		return errors.Wrapf(err, "failed to find Terraform %s in namespace %s", name, ns)
+		return fmt.Errorf("failed to find Terraform %s in namespace %s: %w", name, ns, err)
 	}
 
 	labels = tf.GetLabels()
@@ -249,7 +249,7 @@ func (o *Options) Run() error {
 
 	err = dynkube.DynamicResource(o.DynamicClient, ns, gvr).Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
-		return errors.Wrapf(err, "failed to delete %s %s", kind, name)
+		return fmt.Errorf("failed to delete %s %s: %w", kind, name, err)
 	}
 	log.Logger().Infof("Job succeeded so deleted %s %s", kind, info(name))
 	return nil
@@ -259,7 +259,7 @@ func (o *Options) Run() error {
 func (o *Options) Validate() error {
 	err := o.Options.Validate()
 	if err != nil {
-		return errors.Wrapf(err, "failed to validate pipeline options")
+		return fmt.Errorf("failed to validate pipeline options: %w", err)
 	}
 	if o.CommandRunner == nil {
 		o.CommandRunner = cmdrunner.DefaultCommandRunner
@@ -270,15 +270,15 @@ func (o *Options) Validate() error {
 	}
 	exists, err := files.FileExists(o.File)
 	if err != nil {
-		return errors.Wrapf(err, "failed to check if file exists %s", o.File)
+		return fmt.Errorf("failed to check if file exists %s: %w", o.File, err)
 	}
 	if !exists {
-		return errors.Errorf("file %s does not exist", o.File)
+		return fmt.Errorf("file %s does not exist", o.File)
 	}
 
 	// lets delete any old resources
 	if len(o.Labels) == 0 {
-		return errors.Errorf("no labels could be created")
+		return fmt.Errorf("no labels could be created")
 	}
 
 	if o.Env == nil {
@@ -295,7 +295,7 @@ func (o *Options) Validate() error {
 	if o.EnvPattern != "" {
 		r, err := regexp.Compile(o.EnvPattern)
 		if err != nil {
-			return errors.Wrapf(err, "failed to parse option --env-pattern %s", o.EnvPattern)
+			return fmt.Errorf("failed to parse option --env-pattern %s: %w", o.EnvPattern, err)
 		}
 
 		// lets include any environment variables too
@@ -318,7 +318,7 @@ func (o *Options) Validate() error {
 		}
 		v, err := o.CommandRunner(c)
 		if err != nil {
-			return errors.Wrapf(err, "failed to run command: %s", c.CLI())
+			return fmt.Errorf("failed to run command: %s: %w", c.CLI(), err)
 		}
 		v = strings.TrimSpace(v)
 		if v == "" {
@@ -331,11 +331,11 @@ func (o *Options) Validate() error {
 
 	o.KubeClient, o.Namespace, err = kube.LazyCreateKubeClientAndNamespace(o.KubeClient, o.Namespace)
 	if err != nil {
-		return errors.Wrapf(err, "failed to create kube client")
+		return fmt.Errorf("failed to create kube client: %w", err)
 	}
 	o.DynamicClient, err = kube.LazyCreateDynamicClient(o.DynamicClient)
 	if err != nil {
-		return errors.Wrapf(err, "failed to craete dynamic client")
+		return fmt.Errorf("failed to craete dynamic client: %w", err)
 	}
 	return nil
 }
@@ -349,6 +349,7 @@ func (o *Options) GetContext() context.Context {
 }
 
 func (o *Options) watchJob() error {
+	// TODO: This should probably be rewritten inline, instead of relying on yet another tool
 	args := []string{"verify", "job", "--name", o.Name, "--namespace", o.Namespace}
 	if o.VerifyResult {
 		args = append(args, "--verify-result")
@@ -362,7 +363,7 @@ func (o *Options) watchJob() error {
 	}
 	_, err := o.CommandRunner(c)
 	if err != nil {
-		return errors.Wrapf(err, "failed to run %s", c.CLI())
+		return fmt.Errorf("failed to run %s: %w", c.CLI(), err)
 	}
 	return nil
 }

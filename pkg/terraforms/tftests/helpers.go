@@ -1,12 +1,13 @@
 package tftests
 
 import (
+	"testing"
+
 	"github.com/jenkins-x-plugins/jx-test/pkg/terraforms"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/yaml"
-	"testing"
 
 	"github.com/stretchr/testify/require"
 	dynfake "k8s.io/client-go/dynamic/fake"

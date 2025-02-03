@@ -1,6 +1,9 @@
 package gc_test
 
 import (
+	"testing"
+	"time"
+
 	"github.com/jenkins-x-plugins/jx-test/pkg/cmd/gc"
 	"github.com/jenkins-x-plugins/jx-test/pkg/terraforms/tftests"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/cmdrunner/fakerunner"
@@ -8,8 +11,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/kubernetes/fake"
-	"testing"
-	"time"
 )
 import (
 	"k8s.io/apimachinery/pkg/runtime"
