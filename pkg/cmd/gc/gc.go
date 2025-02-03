@@ -3,20 +3,23 @@ package gc
 import (
 	"context"
 	"fmt"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
+	"strings"
+	"time"
+
 	"github.com/jenkins-x-plugins/jx-test/pkg/dynkube"
 	"github.com/jenkins-x-plugins/jx-test/pkg/terraforms"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/cmdrunner"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/termcolor"
 	"k8s.io/client-go/kubernetes"
-	"strings"
-	"time"
 
 	"github.com/jenkins-x-plugins/jx-test/pkg/root"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/cobras/helper"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/cobras/templates"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/kube"
 	"github.com/jenkins-x/jx-logging/v3/pkg/log"
-	"github.com/pkg/errors"
+
 	"github.com/spf13/cobra"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -61,7 +64,7 @@ func NewCmdGC() (*cobra.Command, *Options) {
 		Short:   "Garbage collects test resources",
 		Long:    cmdLong,
 		Example: fmt.Sprintf(cmdExample, root.BinaryName),
-		Run: func(cmd *cobra.Command, args []string) {
+		Run: func(_ *cobra.Command, _ []string) {
 			err := o.Run()
 			helper.CheckErr(err)
 		},
@@ -82,7 +85,7 @@ func NewCmdGC() (*cobra.Command, *Options) {
 func (o *Options) Run() error {
 	err := o.Validate()
 	if err != nil {
-		return errors.Wrapf(err, "failed to validate setup")
+		return fmt.Errorf("failed to validate setup: %w", err)
 	}
 
 	ctx := o.GetContext()
@@ -90,14 +93,14 @@ func (o *Options) Run() error {
 	gvr := terraforms.TerraformResource
 	o.Client = dynkube.DynamicResource(o.DynamicClient, ns, gvr)
 
-	kind := strings.Title(strings.TrimSuffix(gvr.Resource, "s"))
+	kind := cases.Title(language.AmericanEnglish).String(strings.TrimSuffix(gvr.Resource, "s"))
 
 	// lets delete all the previous resources for this Pull Request and Context
 	list, err := o.Client.List(ctx, metav1.ListOptions{
 		LabelSelector: o.Selector,
 	})
 	if err != nil && apierrors.IsNotFound(err) {
-		return errors.Wrapf(err, "could not find resources for ")
+		return fmt.Errorf("could not find resources for : %w", err)
 	}
 
 	createdBefore := time.Now().Add(o.Duration * -1)
@@ -124,7 +127,7 @@ func (o *Options) Run() error {
 
 		err = o.deleteTerraform(ctx, kind, name)
 		if err != nil {
-			return errors.Wrapf(err, "failed to delete %s %s", kind, name)
+			return fmt.Errorf("failed to delete %s %s: %w", kind, name, err)
 		}
 
 		log.Logger().Infof("deleted %s %s as it was created at: %s", kind, info(name), created.String())
@@ -132,17 +135,17 @@ func (o *Options) Run() error {
 
 	err = o.gcLeases(ctx, createdTime)
 	if err != nil {
-		return errors.Wrapf(err, "failed to GC leases")
+		return fmt.Errorf("failed to GC leases: %w", err)
 	}
 
 	err = o.gcTerraformState(ctx, createdTime)
 	if err != nil {
-		return errors.Wrapf(err, "failed to GC terraform state")
+		return fmt.Errorf("failed to GC terraform state: %w", err)
 	}
 
 	err = o.gcTerraformConfigMaps(ctx, createdTime)
 	if err != nil {
-		return errors.Wrapf(err, "failed to GC terraform configs")
+		return fmt.Errorf("failed to GC terraform configs: %w", err)
 	}
 	return nil
 }
@@ -151,7 +154,7 @@ func (o *Options) deleteTerraform(ctx context.Context, kind, name string) error 
 	ns := o.Namespace
 	err := terraforms.DeleteActiveTerraformJobs(ctx, o.KubeClient, ns, name)
 	if err != nil {
-		return errors.Wrapf(err, "failed to delete active Terraform Jobs for namespace %s name %s", ns, name)
+		return fmt.Errorf("failed to delete active Terraform Jobs for namespace %s name %s: %w", ns, name, err)
 	}
 
 	log.Logger().Infof("deleting %s %s", kind, info(name))
@@ -161,7 +164,7 @@ func (o *Options) deleteTerraform(ctx context.Context, kind, name string) error 
 	}
 	_, err = o.CommandRunner(c)
 	if err != nil {
-		return errors.Wrapf(err, "failed to run %s", c.CLI())
+		return fmt.Errorf("failed to run %s: %w", c.CLI(), err)
 	}
 	return nil
 }
@@ -173,11 +176,11 @@ func (o *Options) Validate() error {
 	var err error
 	o.KubeClient, o.Namespace, err = kube.LazyCreateKubeClientAndNamespace(o.KubeClient, o.Namespace)
 	if err != nil {
-		return errors.Wrapf(err, "failed to create kube client")
+		return fmt.Errorf("failed to create kube client: %w", err)
 	}
 	o.DynamicClient, err = kube.LazyCreateDynamicClient(o.DynamicClient)
 	if err != nil {
-		return errors.Wrapf(err, "failed to craete dynamic client")
+		return fmt.Errorf("failed to craete dynamic client: %w", err)
 	}
 	return nil
 }
@@ -199,7 +202,7 @@ func (o *Options) gcLeases(ctx context.Context, createdTime *metav1.Time) error 
 		err = nil
 	}
 	if err != nil {
-		return errors.Wrapf(err, "failed to list Leases in namespace %s with selector %s", o.Namespace, terraformStateSelector)
+		return fmt.Errorf("failed to list Leases in namespace %s with selector %s: %w", o.Namespace, terraformStateSelector, err)
 	}
 	if list == nil {
 		return nil
@@ -213,7 +216,7 @@ func (o *Options) gcLeases(ctx context.Context, createdTime *metav1.Time) error 
 		}
 		err = leaseInterface.Delete(ctx, r.Name, metav1.DeleteOptions{})
 		if err != nil {
-			return errors.Wrapf(err, "failed to delete Lease %s in namespace %s", r.Name, o.Namespace)
+			return fmt.Errorf("failed to delete Lease %s in namespace %s: %w", r.Name, o.Namespace, err)
 		}
 		log.Logger().Infof("deleted Lease %s", r.Name)
 	}
@@ -230,7 +233,7 @@ func (o *Options) gcTerraformState(ctx context.Context, createdTime *metav1.Time
 		err = nil
 	}
 	if err != nil {
-		return errors.Wrapf(err, "failed to list Secrets in namespace %s with selector %s", o.Namespace, terraformStateSelector)
+		return fmt.Errorf("failed to list Secrets in namespace %s with selector %s: %w", o.Namespace, terraformStateSelector, err)
 	}
 	if list == nil {
 		return nil
@@ -244,7 +247,7 @@ func (o *Options) gcTerraformState(ctx context.Context, createdTime *metav1.Time
 		}
 		err = secretInterface.Delete(ctx, r.Name, metav1.DeleteOptions{})
 		if err != nil {
-			return errors.Wrapf(err, "failed to delete Secret %s in namespace %s", r.Name, o.Namespace)
+			return fmt.Errorf("failed to delete Secret %s in namespace %s: %w", r.Name, o.Namespace, err)
 		}
 		log.Logger().Infof("deleted Secret %s", r.Name)
 	}
@@ -263,7 +266,7 @@ func (o *Options) gcTerraformConfigMaps(ctx context.Context, createdTime *metav1
 		err = nil
 	}
 	if err != nil {
-		return errors.Wrapf(err, "failed to list ConfigMaps in namespace %s with selector %s", o.Namespace, terraformStateSelector)
+		return fmt.Errorf("failed to list ConfigMaps in namespace %s with selector %s: %w", o.Namespace, terraformStateSelector, err)
 	}
 	if list == nil {
 		return nil
@@ -280,7 +283,7 @@ func (o *Options) gcTerraformConfigMaps(ctx context.Context, createdTime *metav1
 		}
 		err = configMapInterface.Delete(ctx, r.Name, metav1.DeleteOptions{})
 		if err != nil {
-			return errors.Wrapf(err, "failed to delete ConfigMap %s in namespace %s", r.Name, o.Namespace)
+			return fmt.Errorf("failed to delete ConfigMap %s in namespace %s: %w", r.Name, o.Namespace, err)
 		}
 		log.Logger().Infof("deleted ConfigMap %s", r.Name)
 	}

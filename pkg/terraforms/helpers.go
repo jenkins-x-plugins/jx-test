@@ -2,10 +2,12 @@ package terraforms
 
 import (
 	"context"
+	"fmt"
+
 	"github.com/jenkins-x/jx-helpers/v3/pkg/kube/jobs"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/termcolor"
 	"github.com/jenkins-x/jx-logging/v3/pkg/log"
-	"github.com/pkg/errors"
+
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -24,7 +26,7 @@ func DeleteActiveTerraformJobs(ctx context.Context, kubeClient kubernetes.Interf
 		return deleteTerraformPods(ctx, kubeClient, ns, name)
 	}
 	if err != nil {
-		return errors.Wrapf(err, "failed to query Job %s in namespace %s", name, ns)
+		return fmt.Errorf("failed to query Job %s in namespace %s: %w", name, ns, err)
 	}
 	if job == nil || jobs.IsJobFinished(job) {
 		return deleteTerraformPods(ctx, kubeClient, ns, name)
@@ -32,7 +34,7 @@ func DeleteActiveTerraformJobs(ctx context.Context, kubeClient kubernetes.Interf
 	log.Logger().Infof("deleting terraform apply Job %s in namespace %s as has not finished and we are about to delete the Terraform resource", info(name), ns)
 	err = jobInterface.Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
-		return errors.Wrapf(err, "failed to delete Job %s in namespace %s", name, ns)
+		return fmt.Errorf("failed to delete Job %s in namespace %s: %w", name, ns, err)
 	}
 	log.Logger().Infof("deleted terraform apply Job %s in namespace %s", info(name), ns)
 	return deleteTerraformPods(ctx, kubeClient, ns, name)
@@ -48,17 +50,17 @@ func deleteTerraformPods(ctx context.Context, kubeClient kubernetes.Interface, n
 		return nil
 	}
 	if err != nil {
-		return errors.Wrapf(err, "failed to query Pods namespace %s with selector %s", ns, selector)
+		return fmt.Errorf("failed to query Pods namespace %s with selector %s: %w", ns, selector, err)
 	}
 	if podList == nil {
 		return nil
 	}
 
-	for _, pod := range podList.Items {
-		name := pod.Name
+	for i := range podList.Items {
+		name := podList.Items[i].Name
 		err = podInterface.Delete(ctx, name, metav1.DeleteOptions{})
 		if err != nil {
-			return errors.Wrapf(err, "failed to delete pod %s", name)
+			return fmt.Errorf("failed to delete pod %s: %w", name, err)
 		}
 		log.Logger().Infof("deleted terraform apply Pod %s in namespace %s", info(name), ns)
 	}
