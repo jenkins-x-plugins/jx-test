@@ -3,8 +3,6 @@ package gc
 import (
 	"context"
 	"fmt"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 	"strings"
 	"time"
 
@@ -93,7 +91,7 @@ func (o *Options) Run() error {
 	gvr := terraforms.TerraformResource
 	o.Client = dynkube.DynamicResource(o.DynamicClient, ns, gvr)
 
-	kind := cases.Title(language.AmericanEnglish).String(strings.TrimSuffix(gvr.Resource, "s"))
+	kind := "Terraform"
 
 	// lets delete all the previous resources for this Pull Request and Context
 	list, err := o.Client.List(ctx, metav1.ListOptions{
@@ -130,7 +128,7 @@ func (o *Options) Run() error {
 			return fmt.Errorf("failed to delete %s %s: %w", kind, name, err)
 		}
 
-		log.Logger().Infof("deleted %s %s as it was created at: %s", kind, info(name), created.String())
+		log.Logger().Infof("deleted %s %s since it was created at: %s", kind, info(name), created.String())
 	}
 
 	err = o.gcLeases(ctx, createdTime)
@@ -158,7 +156,16 @@ func (o *Options) deleteTerraform(ctx context.Context, kind, name string) error 
 	}
 
 	log.Logger().Infof("deleting %s %s", kind, info(name))
+
 	c := &cmdrunner.Command{
+		Name: "kubectl",
+		Args: []string{"patch", kind, name, "-p", "{\"metadata\": {\"finalizers\": []}}", "--type=merge"},
+	}
+	_, err = o.CommandRunner(c)
+	if err != nil {
+		return fmt.Errorf("failed to run %s: %w", c.CLI(), err)
+	}
+	c = &cmdrunner.Command{
 		Name: "kubectl",
 		Args: []string{"delete", kind, name},
 	}
