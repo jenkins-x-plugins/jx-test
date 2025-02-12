@@ -13,6 +13,8 @@ rules:
   - watch
   - create
   - delete
+  - patch
+  - update
 - apiGroups:
   - coordination.k8s.io
   resources:
