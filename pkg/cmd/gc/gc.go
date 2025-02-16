@@ -315,6 +315,9 @@ func (o *Options) gcRepositories(ctx context.Context, createdTime *metav1.Time) 
 	}
 	log.Logger().Infof("cleaning repositories")
 	itr, err := ghinstallation.NewAppsTransportKeyFromFile(http.DefaultTransport, o.AppID, o.AppCertificateFile)
+	if err != nil {
+		log.Logger().Fatalf("failed to configure transport as app (%d): %v", o.AppID, err)
+	}
 	client := github.NewClient(&http.Client{Transport: itr})
 
 	installations, _, err := client.Apps.ListInstallations(context.Background(), &github.ListOptions{})
