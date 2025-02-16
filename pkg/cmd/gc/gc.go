@@ -3,6 +3,9 @@ package gc
 import (
 	"context"
 	"fmt"
+	"github.com/bradleyfalzon/ghinstallation/v2"
+	"github.com/google/go-github/v69/github"
+	"net/http"
 	"strings"
 	"time"
 
@@ -51,6 +54,8 @@ type Options struct {
 	Ctx                      context.Context
 	Client                   dynamic.ResourceInterface
 	CommandRunner            cmdrunner.CommandRunner
+	AppID                    int64
+	AppCertificateFile       string
 }
 
 // NewCmdGC creates a command object for the command
@@ -76,6 +81,8 @@ func NewCmdGC() (*cobra.Command, *Options) {
 	cmd.Flags().StringVarP(&o.Selector, "selector", "l", "kind="+terraforms.LabelValueKindTest, "the selector to find the Terraform resources to remove")
 	cmd.Flags().StringVarP(&o.TerraformConfigMapPrefix, "tf-cm-prefix", "t", defaultTerraformConfigMapPrefix, "the ConfigMap name prefix of the Terraform state")
 	cmd.Flags().DurationVarP(&o.Duration, "duration", "d", 2*time.Hour, "The maximum age of a Terraform resource before it is garbage collected")
+	cmd.Flags().Int64Var(&o.AppID, "app-id", 0, "GitHub App ID used to gc repositories")
+	cmd.Flags().StringVar(&o.AppCertificateFile, "app-certificate-file", "", "Certificate for GitHub App used to gc repositories")
 	return cmd, o
 }
 
@@ -144,6 +151,10 @@ func (o *Options) Run() error {
 	err = o.gcTerraformConfigMaps(ctx, createdTime)
 	if err != nil {
 		return fmt.Errorf("failed to GC terraform configs: %w", err)
+	}
+	err = o.gcRepositories(ctx, createdTime)
+	if err != nil {
+		return fmt.Errorf("failed to GC test repsitories: %w", err)
 	}
 	return nil
 }
@@ -293,6 +304,62 @@ func (o *Options) gcTerraformConfigMaps(ctx context.Context, createdTime *metav1
 			return fmt.Errorf("failed to delete ConfigMap %s in namespace %s: %w", r.Name, o.Namespace, err)
 		}
 		log.Logger().Infof("deleted ConfigMap %s", r.Name)
+	}
+	return nil
+}
+
+func (o *Options) gcRepositories(ctx context.Context, createdTime *metav1.Time) error {
+	if o.AppID == 0 || o.AppCertificateFile == "" {
+		log.Logger().Infof("--app-id and --app-certificate-file are not specified, so no repositories are garbage collected")
+		return nil
+	}
+	log.Logger().Infof("cleaning repositories")
+	itr, err := ghinstallation.NewAppsTransportKeyFromFile(http.DefaultTransport, o.AppID, o.AppCertificateFile)
+	client := github.NewClient(&http.Client{Transport: itr})
+
+	installations, _, err := client.Apps.ListInstallations(context.Background(), &github.ListOptions{})
+	if err != nil {
+		log.Logger().Fatalf("failed to list installations: %v\n", err)
+	}
+
+	// capture our installationId for our app
+	// we need this for the access token
+	var installID int64
+	for _, val := range installations {
+		installID = val.GetID()
+	}
+	log.Logger().Infof("found installation %d", installID)
+
+	token, _, err := client.Apps.CreateInstallationToken(
+		context.Background(),
+		installID,
+		&github.InstallationTokenOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to create installation token: %v\n", err)
+	}
+
+	apiClient := github.NewClient(nil).WithAuthToken(
+		token.GetToken(),
+	)
+	repos, _, err := apiClient.Repositories.ListByOrg(ctx, "jenkins-x-bdd", &github.RepositoryListByOrgOptions{})
+	if err != nil {
+		return err
+	}
+	log.Logger().Infof("got %d repos", len(repos))
+	for i := range repos {
+		repo := repos[i]
+		log.Logger().Infof("maybe removing repository %s", repo.Name)
+		if !repo.CreatedAt.Before(createdTime.Time) {
+			log.Logger().Infof("not removing repository %s as it was created at %s", repo.Name, repo.CreatedAt.String())
+			continue
+		}
+		_, err = apiClient.Repositories.Delete(ctx,
+			"jenkins-x-bdd",
+			*repo.Name)
+		if err != nil {
+			return fmt.Errorf("failed to delete the repository %s/%s: %w", *repo.Owner.Name, *repo.Name, err)
+		}
+
 	}
 	return nil
 }
