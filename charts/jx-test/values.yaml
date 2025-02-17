@@ -13,6 +13,8 @@ image:
 # the age of Terraform resources to remove
 duration: 2h
 
+appID: 1147373
+
 jx:
   # whether to create a Release CRD when installing charts with Release CRDs included
   releaseCRD: false
