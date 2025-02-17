@@ -338,7 +338,7 @@ func (o *Options) gcRepositories(ctx context.Context, createdTime *metav1.Time) 
 		installID,
 		&github.InstallationTokenOptions{})
 	if err != nil {
-		return fmt.Errorf("failed to create installation token: %v\n", err)
+		return fmt.Errorf("failed to create installation token: %v", err)
 	}
 
 	apiClient := github.NewClient(nil).WithAuthToken(
