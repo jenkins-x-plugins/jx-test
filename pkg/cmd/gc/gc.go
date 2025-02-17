@@ -328,10 +328,12 @@ func (o *Options) gcRepositories(ctx context.Context, createdTime *metav1.Time) 
 	// capture our installationId for our app
 	// we need this for the access token
 	var installID int64
-	for _, val := range installations {
-		installID = val.GetID()
+	var owner string
+	for _, installation := range installations {
+		installID = installation.GetID()
+		owner = installation.GetAccount().GetLogin()
 	}
-	log.Logger().Infof("found installation %d", installID)
+	log.Logger().Infof("found installation %d for owner %s", installID, owner)
 
 	token, _, err := client.Apps.CreateInstallationToken(
 		context.Background(),
@@ -344,21 +346,19 @@ func (o *Options) gcRepositories(ctx context.Context, createdTime *metav1.Time) 
 	apiClient := github.NewClient(nil).WithAuthToken(
 		token.GetToken(),
 	)
-	repos, _, err := apiClient.Repositories.ListByOrg(ctx, "jenkins-x-bdd", &github.RepositoryListByOrgOptions{})
+	repos, _, err := apiClient.Repositories.ListByOrg(ctx, owner, &github.RepositoryListByOrgOptions{})
 	if err != nil {
 		return err
 	}
 	log.Logger().Infof("got %d repos", len(repos))
 	for i := range repos {
 		repo := repos[i]
-		log.Logger().Infof("maybe removing repository %s", repo.Name)
+		log.Logger().Infof("maybe removing repository %s", *repo.Name)
 		if !repo.CreatedAt.Before(createdTime.Time) {
-			log.Logger().Infof("not removing repository %s as it was created at %s", repo.Name, repo.CreatedAt.String())
+			log.Logger().Infof("not removing repository %s as it was created at %s", *repo.Name, repo.CreatedAt.String())
 			continue
 		}
-		_, err = apiClient.Repositories.Delete(ctx,
-			"jenkins-x-bdd",
-			*repo.Name)
+		_, err = apiClient.Repositories.Delete(ctx, owner, *repo.Name)
 		if err != nil {
 			return fmt.Errorf("failed to delete the repository %s/%s: %w", *repo.Owner.Name, *repo.Name, err)
 		}
