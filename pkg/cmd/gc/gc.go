@@ -333,7 +333,7 @@ func (o *Options) gcRepositories(ctx context.Context, createdTime *metav1.Time) 
 		installID = installation.GetID()
 		owner = installation.GetAccount().GetLogin()
 	}
-	log.Logger().Infof("found installation %d for owner %s", installID, owner)
+	log.Logger().Debugf("found installation %d for owner %s", installID, owner)
 
 	token, _, err := client.Apps.CreateInstallationToken(
 		context.Background(),
@@ -350,10 +350,9 @@ func (o *Options) gcRepositories(ctx context.Context, createdTime *metav1.Time) 
 	if err != nil {
 		return err
 	}
-	log.Logger().Infof("got %d repos", len(repos))
+	log.Logger().Infof("found %d repositories in %s", len(repos), owner)
 	for i := range repos {
 		repo := repos[i]
-		log.Logger().Infof("maybe removing repository %s", *repo.Name)
 		if !repo.CreatedAt.Before(createdTime.Time) {
 			log.Logger().Infof("not removing repository %s as it was created at %s", *repo.Name, repo.CreatedAt.String())
 			continue
@@ -362,7 +361,7 @@ func (o *Options) gcRepositories(ctx context.Context, createdTime *metav1.Time) 
 		if err != nil {
 			return fmt.Errorf("failed to delete the repository %s/%s: %w", *repo.Owner.Name, *repo.Name, err)
 		}
-
+		log.Logger().Infof("deleted repository %s", *repo.Name)
 	}
 	return nil
 }
