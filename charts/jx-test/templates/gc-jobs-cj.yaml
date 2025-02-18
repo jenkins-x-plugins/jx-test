@@ -31,7 +31,7 @@ spec:
               - --app-certificate-file
               - /secret/private-key.pem
               - --app-id
-              - {{ .Values.appID | quote }}
+              - "{{ .Values.appID }}"
               env:
               - name: XDG_CONFIG_HOME
                 value: /home
