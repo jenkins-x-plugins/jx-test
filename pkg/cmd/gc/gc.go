@@ -7,6 +7,7 @@ import (
 	"github.com/google/go-github/v69/github"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jenkins-x-plugins/jx-test/pkg/dynkube"
@@ -167,20 +168,27 @@ func (o *Options) deleteTerraform(ctx context.Context, kind, name string) error 
 	}
 
 	log.Logger().Infof("deleting %s %s", kind, info(name))
+	var wg sync.WaitGroup
 
 	c := &cmdrunner.Command{
+		Name: "kubectl",
+		Args: []string{"delete", kind, name},
+	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_, err := o.CommandRunner(c)
+		if err != nil {
+			log.Logger().Errorf("failed to delete %s %s: %w", kind, name, err)
+		}
+	}()
+	time.Sleep(time.Second)
+	c = &cmdrunner.Command{
 		Name: "kubectl",
 		Args: []string{"patch", kind, name, "-p", "{\"metadata\": {\"finalizers\": []}}", "--type=merge"},
 	}
 	_, err = o.CommandRunner(c)
-	if err != nil {
-		return fmt.Errorf("failed to run %s: %w", c.CLI(), err)
-	}
-	c = &cmdrunner.Command{
-		Name: "kubectl",
-		Args: []string{"delete", kind, name},
-	}
-	_, err = o.CommandRunner(c)
+	wg.Wait()
 	if err != nil {
 		return fmt.Errorf("failed to run %s: %w", c.CLI(), err)
 	}
@@ -189,7 +197,7 @@ func (o *Options) deleteTerraform(ctx context.Context, kind, name string) error 
 
 func (o *Options) Validate() error {
 	if o.CommandRunner == nil {
-		o.CommandRunner = cmdrunner.QuietCommandRunner
+		o.CommandRunner = cmdrunner.DefaultCommandRunner
 	}
 	var err error
 	o.KubeClient, o.Namespace, err = kube.LazyCreateKubeClientAndNamespace(o.KubeClient, o.Namespace)
