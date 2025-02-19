@@ -179,7 +179,7 @@ func (o *Options) deleteTerraform(ctx context.Context, kind, name string) error 
 		defer wg.Done()
 		_, err := o.CommandRunner(c)
 		if err != nil {
-			log.Logger().Errorf("failed to delete %s %s: %w", kind, name, err)
+			log.Logger().Errorf("failed to delete %s %s: %s", kind, name, err)
 		}
 	}()
 	time.Sleep(time.Second)
