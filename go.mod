@@ -5,7 +5,7 @@ require (
 	github.com/bradleyfalzon/ghinstallation/v2 v2.13.0
 	github.com/cpuguy83/go-md2man v1.0.10
 	github.com/google/go-github/v69 v69.1.0
-	github.com/jenkins-x/jx-helpers/v3 v3.9.7
+	github.com/jenkins-x/jx-helpers/v3 v3.9.8
 	github.com/jenkins-x/jx-logging/v3 v3.1.0
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.6
