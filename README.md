@@ -12,7 +12,7 @@
 
 Download the [jx-test binary](https://github.com/jenkins-x-plugins/jx-test/releases) for your operating system and add it to your `$PATH`.
 
-Or you can use `jx test` directly in the [JayeX 3.x CLI](https://github.com/jenkins-x/jx-cli)
+Or you can use `jx test` directly in the [JayeX 3.x CLI](https://github.com/jenkins-x/jx)
 
 
 ### Creating a Terraform System Test
